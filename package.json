@@ -1,0 +1,19 @@
+{
+  "name": "plastic-engine",
+  "version": "1.0.0",
+  "description": "a simple rendering engine",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Geooc/plastic-engine.git"
+  },
+  "author": "Neyco",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Geooc/plastic-engine/issues"
+  },
+  "homepage": "https://github.com/Geooc/plastic-engine#readme"
+}
