@@ -24,6 +24,9 @@ function openProject(projectPath) {
                 res.statusCode = 404;
             }
             else {
+                if (filename.endsWith('.js')) {
+                    res.setHeader('Content-Type', 'application/javascript');
+                }
                 res.write(data);
             }
             res.end();
