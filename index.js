@@ -18,9 +18,8 @@ function openProject(projectPath) {
         if (filename == '/') filename = '/index.html';
         let filepath = path.resolve(__dirname, 'page');
         filepath = path.join(filepath, filename);
-        console.log(filepath);
 
-        fs.readFile(filepath, function (err, data) {
+        fs.readFile(filepath, (err, data) => {
             if (err) {
                 res.statusCode = 404;
             }
