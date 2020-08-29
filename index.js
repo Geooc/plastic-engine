@@ -22,7 +22,7 @@ function openProject(projectPath) {
 
         fs.readFile(filepath, function (err, data) {
             if (err) {
-                res.write('404 Not Found');
+                res.statusCode = 404;
             }
             else {
                 res.write(data);
