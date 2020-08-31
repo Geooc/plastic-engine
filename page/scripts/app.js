@@ -48,32 +48,15 @@ const indices = [
     20, 21, 22, 20, 22, 23    // left
 ];
 
-const vsSrc = `
-precision mediump float;
-
-attribute vec3 aVertexPosition;
-attribute vec2 aUV;
-
-varying vec2 vUV;
-
-uniform mat4 uView;
-uniform mat4 uProj;
-
-void main() {
-    vUV = aUV;
-    gl_Position = uProj * uView * vec4(aVertexPosition, 1.0);
+// temporal function
+function readTextSync(url) {
+    let ret;
+    let xhr = new XMLHttpRequest();
+    xhr.open("GET", url, false);
+    xhr.onload = () => { ret = xhr.responseText; }
+    xhr.send();
+    return ret;
 }
-`;
-
-const fsSrc = `
-precision mediump float;
-
-varying vec2 vUV;
-
-void main() {
-    gl_FragColor = vec4(vUV, 0.5, 1.0);
-}
-`;
 
 class App {
     constructor() {
@@ -130,6 +113,8 @@ class App {
     init() {
         this.testVbo = this.glContext.createVertexBuffer(new Float32Array(vertices));
         this.testEbo = this.glContext.createIndexBuffer(new Uint16Array(indices));
+        let vsSrc = readTextSync('@shaders/test_vs.glsl');
+        let fsSrc = readTextSync('@shaders/test_fs.glsl');
         this.testShader = this.glContext.createShaderProgram(vsSrc, fsSrc);
     }
 

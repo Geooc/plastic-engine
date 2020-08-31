@@ -135,7 +135,7 @@ class WebGLContext {
     /**
      * 
      * @param {WebGLBuffer} buffer the vertex buffer to bind
-     * @param {string} attribName the index of the vertex attribute
+     * @param {string} attribName the name of the vertex attribute
      * @param {GLint} size the number of components per vertex attribute
      * @param {GLenum} type the data type of each component in the array
      * @param {GLsizei} stride the offset in bytes between the beginning of consecutive vertex attributes

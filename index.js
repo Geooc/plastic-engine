@@ -14,9 +14,16 @@ function openProject(projectPath) {
     const editorUrl = 'http://localhost:' + port;
 
     const server = http.createServer((req, res) => {
-        let filename = url.parse(req.url, true).pathname;
-        if (filename == '/') filename = '/index.html';
-        let filepath = path.resolve(__dirname, 'page');
+        let filename, filepath;
+        if (req.url.startsWith('/@')) {// read from project path
+            filename = '/' + req.url.slice(2);
+            filepath = projectPath;
+        }
+        else {
+            filename = url.parse(req.url, true).pathname;
+            if (filename == '/') filename = '/index.html';
+            filepath = path.resolve(__dirname, 'page');
+        }
         filepath = path.join(filepath, filename);
 
         fs.readFile(filepath, (err, data) => {
@@ -24,8 +31,13 @@ function openProject(projectPath) {
                 res.statusCode = 404;
             }
             else {
-                if (filename.endsWith('.js')) {
-                    res.setHeader('Content-Type', 'application/javascript');
+                let ext = filename.substr(filename.lastIndexOf('.') + 1);
+                switch (ext) {
+                    case 'js':
+                        res.setHeader('Content-Type', 'application/javascript');
+                        break;
+                    default:
+                        break;
                 }
                 res.write(data);
             }
