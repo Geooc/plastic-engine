@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 function newProject(projectPath) {
-    //
+    // todo
 }
 
 function openProject(projectPath) {
@@ -11,7 +11,7 @@ function openProject(projectPath) {
     const fs = require('fs');
 
     const port = 2020;
-    const editorUrl = 'http://localhost:' + port;
+    const editorUrl = `http://localhost:${port}`;
 
     const server = http.createServer((req, res) => {
         let filename, filepath;
@@ -62,7 +62,7 @@ function openProject(projectPath) {
 }
 
 function buildProject(projectPath) {
-    //
+    // todo
 }
 
 const args = process.argv.slice(2);
