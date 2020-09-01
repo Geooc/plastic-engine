@@ -1,7 +1,12 @@
 const canvas = document.querySelector('#glcanvas');
-const gl = canvas.getContext('webgl');
+let gl = canvas.getContext('webgl2');
+let isWebGL2 = true;
+if (!gl) {
+    isWebGL2 = false;
+    gl = canvas.getContext('webgl');
+}
 if (!gl) alert('Your browser or machine may not support webgl.');
-const ext = {};
+let ext = {};
 ext['EXT_texture_filter_anisotropic'] = gl.getExtension("EXT_texture_filter_anisotropic");
 if (!ext['EXT_texture_filter_anisotropic']) alert('Anisotropic is not supported!');
 
@@ -17,6 +22,10 @@ function compileShader(type, src) {
     }
 
     return shader;
+}
+
+function isPowerOf2(value) {
+    return (value & (value - 1)) == 0;
 }
 
 class ShaderProgram {
@@ -87,6 +96,10 @@ class WebGLContext {
 
     // texture
     createTextureRGBA8(image, filter = this.FILTER_TYPE_BILINEAR, warp = this.WARP_TYPE_CLAMP) {
+        if (!isWebGL2 && !(isPowerOf2(image.width) && isPowerOf2(image.height))) {
+            filter = this.FILTER_TYPE_BILINEAR;
+            warp = this.WARP_TYPE_CLAMP;
+        }
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
@@ -122,6 +135,10 @@ class WebGLContext {
     useTexture(texture, slot = 0) {
         gl.activeTexture(gl.TEXTURE0 + slot);
         gl.bindTexture(gl.TEXTURE_2D, texture);
+    }
+
+    destoryTexture(texture) {
+        gl.deleteTexture(texture);
     }
 
     // shader

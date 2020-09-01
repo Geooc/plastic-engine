@@ -123,7 +123,7 @@ class App {
         let testTexture = this.testTexture;
         let glContext = this.glContext;
         let img = new Image();
-        img.onload = () => { testTexture = glContext.createTextureRGBA8(img, glContext.FILTER_TYPE_ANISOTROPIC); };
+        img.onload = () => { testTexture = glContext.createTextureRGBA8(img, glContext.FILTER_TYPE_TRILINEAR); };
         img.src = '@images/test.jpg';
     }
 
@@ -135,11 +135,12 @@ class App {
         this.drawScene();
     }
 
-    quit() {
-        this.glContext.destoryBuffer(this.testVbo);
-        this.glContext.destoryBuffer(this.testEbo);
-        this.glContext.destoryShaderProgram(this.testShader);
-    }
+    // quit() {
+    //     this.glContext.destoryBuffer(this.testVbo);
+    //     this.glContext.destoryBuffer(this.testEbo);
+    //     this.glContext.destoryTexture(this.testTexture);
+    //     this.glContext.destoryShaderProgram(this.testShader);
+    // }
 }
 
 let app = new App();
