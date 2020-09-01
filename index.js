@@ -36,6 +36,8 @@ function openProject(projectPath) {
                     case 'js':
                         res.setHeader('Content-Type', 'application/javascript');
                         break;
+                    case 'glsl':
+                        res.setHeader('Content-Type', 'text/plain');
                     default:
                         break;
                 }

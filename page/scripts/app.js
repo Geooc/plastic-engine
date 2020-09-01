@@ -99,6 +99,9 @@ class App {
 
     drawScene() {
         this.glContext.clearColorAndDepth();
+        if (this.testTexture) {
+            this.glContext.useTexture(this.testTexture, 0);
+        }
         if (this.testShader) {
             this.glContext.useShaderProgram(this.testShader);
             this.glContext.setUniformM('uView', this.viewMat);
@@ -116,6 +119,12 @@ class App {
         let vsSrc = readTextSync('@shaders/test_vs.glsl');
         let fsSrc = readTextSync('@shaders/test_fs.glsl');
         this.testShader = this.glContext.createShaderProgram(vsSrc, fsSrc);
+
+        let testTexture = this.testTexture;
+        let glContext = this.glContext;
+        let img = new Image();
+        img.onload = () => { testTexture = glContext.createTextureRGBA8(img, glContext.FILTER_TYPE_ANISOTROPIC); };
+        img.src = '@images/test.jpg';
     }
 
     tick(now) {

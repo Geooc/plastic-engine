@@ -2,6 +2,8 @@ const canvas = document.querySelector('#glcanvas');
 const gl = canvas.getContext('webgl');
 if (!gl) alert('Your browser or machine may not support webgl.');
 const ext = {};
+ext['EXT_texture_filter_anisotropic'] = gl.getExtension("EXT_texture_filter_anisotropic");
+if (!ext['EXT_texture_filter_anisotropic']) alert('Anisotropic is not supported!');
 
 // utils
 function compileShader(type, src) {
@@ -51,6 +53,15 @@ class WebGLContext {
         this.DATA_TYPE_FLOAT = gl.FLOAT;
         this.DATA_TYPE_UNSIGNED_SHORT = gl.UNSIGNED_SHORT;
 
+        this.FILTER_TYPE_POINT = 0;
+        this.FILTER_TYPE_BILINEAR = 1;
+        this.FILTER_TYPE_TRILINEAR = 2;
+        this.FILTER_TYPE_ANISOTROPIC = 3;
+
+        this.WARP_TYPE_REPEAT = gl.REPEAT;
+        this.WARP_TYPE_MIRRORED = gl.MIRRORED_REPEAT;
+        this.WARP_TYPE_CLAMP = gl.CLAMP_TO_EDGE;
+
         this.currentShaderProgram = null;
     }
 
@@ -72,6 +83,45 @@ class WebGLContext {
 
     setViewport(x, y, width, height) {
         gl.viewport(x, y, width, height);
+    }
+
+    // texture
+    createTextureRGBA8(image, filter = this.FILTER_TYPE_BILINEAR, warp = this.WARP_TYPE_CLAMP) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        // filter
+        let min = gl.NEAREST;
+        let mag = gl.NEAREST;
+        switch (filter) {
+            case this.FILTER_TYPE_POINT:
+                break;
+            case this.FILTER_TYPE_ANISOTROPIC:
+                if (ext.EXT_texture_filter_anisotropic) {
+                    let maxAnisotropy = gl.getParameter(ext.EXT_texture_filter_anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+                    gl.texParameterf(gl.TEXTURE_2D, ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+                }
+            case this.FILTER_TYPE_TRILINEAR:
+                gl.generateMipmap(gl.TEXTURE_2D);
+                min = gl.LINEAR_MIPMAP_LINEAR;
+                mag = gl.LINEAR;
+                break;
+            case this.FILTER_TYPE_BILINEAR:
+            default:
+                min = gl.NEAREST;
+                mag = gl.LINEAR;
+                break;
+        }
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, min);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, mag);
+        // warp
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, warp);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, warp);
+    }
+
+    useTexture(texture, slot = 0) {
+        gl.activeTexture(gl.TEXTURE0 + slot);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
     }
 
     // shader
