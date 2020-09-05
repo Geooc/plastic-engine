@@ -49,13 +49,11 @@ const indices = [
 ];
 
 // temporal function
-function readTextSync(url) {
-    let ret;
+function readText(url, callback) {
     let xhr = new XMLHttpRequest();
-    xhr.open("GET", url, false);
-    xhr.onload = () => { ret = xhr.responseText; }
+    xhr.open("GET", url);
+    xhr.onload = () => { callback(xhr.responseText); }
     xhr.send();
-    return ret;
 }
 
 class App {
@@ -112,12 +110,20 @@ class App {
     }
 
     init() {
+        // shader
+        let vsSrc, fsSrc;
+        readText('@shaders/test_vs.glsl', (text) => {
+            vsSrc = text;
+            if (vsSrc && fsSrc)  this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
+        });
+        readText('@shaders/test_fs.glsl', (test) => {
+            fsSrc = test;
+            if (vsSrc && fsSrc)  this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
+        });
+        // buffer
         this.testVbo = glc.createVertexBuffer(new Float32Array(vertices).buffer);
         this.testEbo = glc.createIndexBuffer(new Uint16Array(indices).buffer);
-        let vsSrc = readTextSync('@shaders/test_vs.glsl');
-        let fsSrc = readTextSync('@shaders/test_fs.glsl');
-        this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
-
+        // texture
         let testTexture = this.testTexture;
         let img = new Image();
         img.onload = () => { testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); };
