@@ -2,6 +2,7 @@
 
 function newProject(projectPath) {
     // todo
+    openProject(projectPath);
 }
 
 function openProject(projectPath) {

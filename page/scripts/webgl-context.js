@@ -62,14 +62,29 @@ class WebGLContext {
         this.DATA_TYPE_FLOAT = gl.FLOAT;
         this.DATA_TYPE_UNSIGNED_SHORT = gl.UNSIGNED_SHORT;
 
-        this.FILTER_TYPE_POINT = 0;
-        this.FILTER_TYPE_BILINEAR = 1;
-        this.FILTER_TYPE_TRILINEAR = 2;
-        this.FILTER_TYPE_ANISOTROPIC = 3;
+        this.filterType = {
+            POINT       : 0,
+            BILINEAR    : 1,
+            TRILINEAR   : 2,
+            ANISOTROPIC : 3
+        };
 
-        this.WARP_TYPE_REPEAT = gl.REPEAT;
-        this.WARP_TYPE_MIRRORED = gl.MIRRORED_REPEAT;
-        this.WARP_TYPE_CLAMP = gl.CLAMP_TO_EDGE;
+        this.warpType = {
+            REPEAT      : gl.REPEAT,
+            MIRRORED    : gl.MIRRORED_REPEAT,
+            CLAMP       : gl.CLAMP_TO_EDGE
+        };
+
+        this.bufferDataType = {
+            VERTEX_BYTE     : 0,
+            VERTEX_SHORT    : 1,
+            VERTEX_UBYTE    : 2,
+            VERTEX_USHORT   : 3,
+            VERTEX_FLOAT    : 4,
+            INDEX_UBYTE     : 5,
+            INDEX_USHORT    : 6,
+            INDEX_UINT      : 7// needs OES_element_index_uint
+        };
 
         this.currentShaderProgram = null;
     }
@@ -95,10 +110,10 @@ class WebGLContext {
     }
 
     // texture
-    createTextureRGBA8(image, filter = this.FILTER_TYPE_BILINEAR, warp = this.WARP_TYPE_CLAMP) {
+    createTextureRGBA8(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
         if (!isWebGL2 && !(isPowerOf2(image.width) && isPowerOf2(image.height))) {
-            filter = this.FILTER_TYPE_BILINEAR;
-            warp = this.WARP_TYPE_CLAMP;
+            filter = this.filterType.BILINEAR;
+            warp = this.warpType.CLAMP;
         }
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -107,19 +122,19 @@ class WebGLContext {
         let min = gl.NEAREST;
         let mag = gl.NEAREST;
         switch (filter) {
-            case this.FILTER_TYPE_POINT:
+            case this.filterType.POINT:
                 break;
-            case this.FILTER_TYPE_ANISOTROPIC:
+            case this.filterType.ANISOTROPIC:
                 if (ext.EXT_texture_filter_anisotropic) {
                     let maxAnisotropy = gl.getParameter(ext.EXT_texture_filter_anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
                     gl.texParameterf(gl.TEXTURE_2D, ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
                 }
-            case this.FILTER_TYPE_TRILINEAR:
+            case this.filterType.TRILINEAR:
                 gl.generateMipmap(gl.TEXTURE_2D);
                 min = gl.LINEAR_MIPMAP_LINEAR;
                 mag = gl.LINEAR;
                 break;
-            case this.FILTER_TYPE_BILINEAR:
+            case this.filterType.BILINEAR:
             default:
                 min = gl.NEAREST;
                 mag = gl.LINEAR;
@@ -240,4 +255,6 @@ class WebGLContext {
     }
 }
 
-export { WebGLContext }
+const webGLContext = new WebGLContext();
+
+export { webGLContext }

@@ -1,4 +1,4 @@
-import { WebGLContext } from './webgl-context.js'
+import { webGLContext as glc } from './webgl-context.js'
 import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
 
 const vertices = [
@@ -64,8 +64,6 @@ class App {
         this.delta = 0;
         this._lastFrame = 0;
 
-        this.glContext = new WebGLContext();
-
         this.fovy = 70;
         this.projMat = calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
         this.viewMat = calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
@@ -84,7 +82,7 @@ class App {
 
     _resize(width, height) {
         this.projMat = calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
-        this.glContext.setViewport(0, 0, width, height);
+        glc.setViewport(0, 0, width, height);
     }
 
     checkSize(canvas) {
@@ -98,48 +96,47 @@ class App {
     }
 
     drawScene() {
-        this.glContext.clearColorAndDepth();
+        glc.clearColorAndDepth();
         if (this.testTexture) {
-            this.glContext.useTexture(this.testTexture, 0);
+            glc.useTexture(this.testTexture, 0);
         }
         if (this.testShader) {
-            this.glContext.useShaderProgram(this.testShader);
-            this.glContext.setUniformM('uView', this.viewMat);
-            this.glContext.setUniformM('uProj', this.projMat);
-            this.glContext.useVertexBuffer(this.testVbo, 'aVertexPosition', 3, this.glContext.DATA_TYPE_FLOAT, 20, 0);
-            this.glContext.useVertexBuffer(this.testVbo, 'aUV', 2, this.glContext.DATA_TYPE_FLOAT, 20, 12);
-            this.glContext.useIndexBuffer(this.testEbo);
-            this.glContext.drawTriUseIndices(36, this.glContext.DATA_TYPE_UNSIGNED_SHORT);
+            glc.useShaderProgram(this.testShader);
+            glc.setUniformM('uView', this.viewMat);
+            glc.setUniformM('uProj', this.projMat);
+            glc.useVertexBuffer(this.testVbo, 'aVertexPosition', 3, glc.DATA_TYPE_FLOAT, 20, 0);
+            glc.useVertexBuffer(this.testVbo, 'aUV', 2, glc.DATA_TYPE_FLOAT, 20, 12);
+            glc.useIndexBuffer(this.testEbo);
+            glc.drawTriUseIndices(36, glc.DATA_TYPE_UNSIGNED_SHORT);
         }
     }
 
     init() {
-        this.testVbo = this.glContext.createVertexBuffer(new Float32Array(vertices));
-        this.testEbo = this.glContext.createIndexBuffer(new Uint16Array(indices));
+        this.testVbo = glc.createVertexBuffer(new Float32Array(vertices).buffer);
+        this.testEbo = glc.createIndexBuffer(new Uint16Array(indices).buffer);
         let vsSrc = readTextSync('@shaders/test_vs.glsl');
         let fsSrc = readTextSync('@shaders/test_fs.glsl');
-        this.testShader = this.glContext.createShaderProgram(vsSrc, fsSrc);
+        this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
 
         let testTexture = this.testTexture;
-        let glContext = this.glContext;
         let img = new Image();
-        img.onload = () => { testTexture = glContext.createTextureRGBA8(img, glContext.FILTER_TYPE_TRILINEAR); };
+        img.onload = () => { testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); };
         img.src = '@images/test.jpg';
     }
 
     tick(now) {
         this.updateTime(now);
         this.updateView();
-        this.checkSize(this.glContext.getCanvas());
+        this.checkSize(glc.getCanvas());
 
         this.drawScene();
     }
 
     // quit() {
-    //     this.glContext.destoryBuffer(this.testVbo);
-    //     this.glContext.destoryBuffer(this.testEbo);
-    //     this.glContext.destoryTexture(this.testTexture);
-    //     this.glContext.destoryShaderProgram(this.testShader);
+    //     glc.destoryBuffer(this.testVbo);
+    //     glc.destoryBuffer(this.testEbo);
+    //     glc.destoryTexture(this.testTexture);
+    //     glc.destoryShaderProgram(this.testShader);
     // }
 }
 
