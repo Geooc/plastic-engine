@@ -60,7 +60,7 @@ class WebGLContext {
             CLAMP       : gl.CLAMP_TO_EDGE
         };
 
-        this.DataType = {
+        this.dataType = {
             BYTE        : gl.BYTE,
             SHORT       : gl.SHORT,
             UBYTE       : gl.UNSIGNED_BYTE,

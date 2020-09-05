@@ -128,9 +128,9 @@ class App {
         this.testEbo = glc.createIndexBuffer(new Uint16Array(indices));
         // primitives
         const vertexArrayInfo = [
-            { buffer: this.testVbo, type: glc.DataType.FLOAT, byteStride: 20, byteOffset: 0 },
-            { buffer: this.testVbo, type: glc.DataType.FLOAT, byteStride: 20, byteOffset: 12 },
-            { buffer: this.testEbo, type: glc.DataType.USHORT }
+            { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 0 },
+            { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 12 },
+            { buffer: this.testEbo, type: glc.dataType.USHORT }
         ];
         this.primitives = glc.createPrimitives(glc.primitiveType.TRIANGLES, attribs, vertexArrayInfo, 36);
         // shader
