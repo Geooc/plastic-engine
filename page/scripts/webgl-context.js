@@ -6,11 +6,19 @@ if (!gl) {
     gl = canvas.getContext('webgl');
 }
 if (!gl) alert('Your browser or machine may not support webgl.');
-let ext = {};
-ext['EXT_texture_filter_anisotropic'] = gl.getExtension("EXT_texture_filter_anisotropic");
-if (!ext['EXT_texture_filter_anisotropic']) alert('Anisotropic is not supported!');
+
+const hasFilterAnisotropic = useExtension("EXT_texture_filter_anisotropic");
 
 // utils
+function useExtension(name) {
+    const ext = gl.getExtension(name);
+    if (!ext) return false;
+    for (const prop in ext) {
+        gl[prop] = ext[prop];
+    }
+    return true;
+}
+
 function compileShader(type, src) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, src);
@@ -125,9 +133,9 @@ class WebGLContext {
             case this.filterType.POINT:
                 break;
             case this.filterType.ANISOTROPIC:
-                if (ext.EXT_texture_filter_anisotropic) {
-                    let maxAnisotropy = gl.getParameter(ext.EXT_texture_filter_anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-                    gl.texParameterf(gl.TEXTURE_2D, ext.EXT_texture_filter_anisotropic.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+                if (hasFilterAnisotropic) {
+                    let maxAnisotropy = gl.getParameter(gl.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+                    gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
                 }
             case this.filterType.TRILINEAR:
                 gl.generateMipmap(gl.TEXTURE_2D);
