@@ -1,8 +1,3 @@
-precision mediump float;
-
-attribute vec3 aVertexPosition;
-attribute vec2 aUV;
-
 varying vec2 vUV;
 
 uniform mat4 uView;

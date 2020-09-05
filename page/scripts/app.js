@@ -56,6 +56,18 @@ function readText(url, callback) {
     xhr.send();
 }
 
+function loadVertexShaderAndFragmentShader(vsUrl, fsUrl, callback) {
+    let vsSrc, fsSrc;
+    readText(vsUrl, (src) => { vsSrc = src; if (fsSrc) callback(vsSrc, fsSrc); });
+    readText(fsUrl, (src) => { fsSrc = src; if (vsSrc) callback(vsSrc, fsSrc); });
+}
+
+function loadImage(url, callback) {
+    let img = new Image();
+    img.onload = () => { callback(img) };
+    img.src = url;
+}
+
 class App {
     constructor() {
         this.frame = 0;
@@ -95,39 +107,38 @@ class App {
 
     drawScene() {
         glc.clearColorAndDepth();
-        if (this.testTexture) {
-            glc.useTexture(this.testTexture, 0);
-        }
-        if (this.testShader) {
-            glc.useShaderProgram(this.testShader);
-            glc.setUniformM('uView', this.viewMat);
-            glc.setUniformM('uProj', this.projMat);
-            glc.useVertexBuffer(this.testVbo, 'aVertexPosition', 3, glc.DATA_TYPE_FLOAT, 20, 0);
-            glc.useVertexBuffer(this.testVbo, 'aUV', 2, glc.DATA_TYPE_FLOAT, 20, 12);
-            glc.useIndexBuffer(this.testEbo);
-            glc.drawTriUseIndices(36, glc.DATA_TYPE_UNSIGNED_SHORT);
+
+        if (glc.useShaderProgram(this.testShader) && this.testTexture) {
+            glc.setShaderParameters({
+                uView: this.viewMat,
+                uProj: this.projMat,
+                uTestTex: this.testTexture,
+            });
+            glc.drawPrimitives(this.primitives);
         }
     }
 
     init() {
-        // shader
-        let vsSrc, fsSrc;
-        readText('@shaders/test_vs.glsl', (text) => {
-            vsSrc = text;
-            if (vsSrc && fsSrc)  this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
-        });
-        readText('@shaders/test_fs.glsl', (test) => {
-            fsSrc = test;
-            if (vsSrc && fsSrc)  this.testShader = glc.createShaderProgram(vsSrc, fsSrc);
-        });
+        const attribs = [
+            { name: 'aVertexPosition', size: 3 },
+            { name: 'aUV', size: 2 }
+        ];
         // buffer
-        this.testVbo = glc.createVertexBuffer(new Float32Array(vertices).buffer);
-        this.testEbo = glc.createIndexBuffer(new Uint16Array(indices).buffer);
+        this.testVbo = glc.createVertexBuffer(new Float32Array(vertices));
+        this.testEbo = glc.createIndexBuffer(new Uint16Array(indices));
+        // primitives
+        const vertexArrayInfo = [
+            { buffer: this.testVbo, type: glc.DataType.FLOAT, byteStride: 20, byteOffset: 0 },
+            { buffer: this.testVbo, type: glc.DataType.FLOAT, byteStride: 20, byteOffset: 12 },
+            { buffer: this.testEbo, type: glc.DataType.USHORT }
+        ];
+        this.primitives = glc.createPrimitives(glc.primitiveType.TRIANGLES, attribs, vertexArrayInfo, 36);
+        // shader
+        loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
+            this.testShader = glc.createShaderProgram('test', attribs, vsSrc, fsSrc);
+        });
         // texture
-        let testTexture = this.testTexture;
-        let img = new Image();
-        img.onload = () => { testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); };
-        img.src = '@images/test.jpg';
+        loadImage('@images/test.jpg', (img) => { this.testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); });
     }
 
     tick(now) {
@@ -142,6 +153,7 @@ class App {
     //     glc.destoryBuffer(this.testVbo);
     //     glc.destoryBuffer(this.testEbo);
     //     glc.destoryTexture(this.testTexture);
+    //     glc.destoryPrimitives(this.primitives);
     //     glc.destoryShaderProgram(this.testShader);
     // }
 }
