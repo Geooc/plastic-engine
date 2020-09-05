@@ -48,7 +48,7 @@ const indices = [
     20, 21, 22, 20, 22, 23    // left
 ];
 
-// temporal function
+// assets utils
 function readText(url, callback) {
     let xhr = new XMLHttpRequest();
     xhr.open("GET", url);
