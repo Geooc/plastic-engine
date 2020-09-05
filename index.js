@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+const path = require('path');
+
 function newProject(projectPath) {
     // todo
     openProject(projectPath);
@@ -8,7 +10,6 @@ function newProject(projectPath) {
 function openProject(projectPath) {
     const http = require('http');
     const url = require('url');
-    const path = require('path');
     const fs = require('fs');
 
     const port = 2020;
@@ -71,14 +72,15 @@ function buildProject(projectPath) {
 const args = process.argv.slice(2);
 
 if (args[0]) {
+    let projectPath = args[1] ? path.join(process.cwd(), args[1]) : process.cwd();
     if (args[0] == 'new') {
-        newProject(process.cwd());
+        newProject(projectPath);
     }
     else if (args[0] == 'open') {
-        openProject(process.cwd());
+        openProject(projectPath);
     }
     else if (args[0] == 'build') {
-        buildProject(process.cwd());
+        buildProject(projectPath);
     }
     else {
         console.log('Wrong parameter(s)');
