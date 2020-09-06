@@ -74,9 +74,76 @@ class App {
         this.delta = 0;
         this._lastFrame = 0;
 
+        // camera parameters
         this.fovy = 70;
+        this.pitch = 0;
+        this.yaw = 0;
+        this.radius = 5;
+        this.at = [0, 0, 0];
+        this.cameraScaleSpeed = 0.01;
+        this.cameraRotSpeed = 0.5;
+        this.cameraSmooth = 0.1;
+        this.targetPitch = this.pitch;
+        this.targetYaw = this.yaw;
+        this.targetRadius = this.radius;
+
         this.projMat = calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
         this.viewMat = calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
+    }
+
+    _recordStart(startX, startY) {
+        this.startX = startX;
+        this.startY = startY;
+        this.recordPitch = this.pitch;
+        this.recordYaw = this.yaw;
+    }
+
+    _handleMove(x, y) {
+        let deltaX = (x - this.startX) * this.cameraRotSpeed;
+        let deltaY = (y - this.startY) * this.cameraRotSpeed;
+        this.targetPitch = this.recordPitch + deltaX;
+        this.targetYaw = Math.max(Math.min(this.recordYaw + deltaY, 75), -75);
+    }
+
+    _handleScale(scale) {
+        this.targetRadius = Math.max(this.targetRadius + scale * this.cameraScaleSpeed, 2);
+    }
+
+    addCameraController(canvas) {
+        canvas.onmousedown = (e) => {
+            e.preventDefault();
+            this._recordStart(e.clientX, e.clientY);
+            canvas.onmousemove = (e) => {
+                e.preventDefault();
+                this._handleMove(e.clientX, e.clientY);
+            }
+            canvas.onmouseup = (e) => {
+                canvas.onmousemove = null;
+            }
+        }
+        canvas.onwheel = (e) => {
+            e.preventDefault();
+            this._handleScale(e.deltaY);
+        }
+        // for touch screen
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.targetTouches.length != 1) return;
+            e.preventDefault();
+            this._recordStart(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.targetTouches.length == 1) {
+                    e.preventDefault();
+                    this._handleMove(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+                }
+                else if (e.targetTouches.length == 2) {
+                    // todo
+                }
+            });
+            canvas.addEventListener('touchend', (e) => {
+                if (e.targetTouches.length == 1)
+                    canvas.addEventListener('touchmove', null);
+            });
+        })//
     }
 
     updateTime(now) {
@@ -86,8 +153,10 @@ class App {
     }
 
     updateView() {
-        let rot = Math.sin(this.frame * 0.25);
-        this.viewMat = calcOrbitViewMatrix(rot * 360, rot * 90, 5, [0, 0, 0]);
+        this.pitch += (this.targetPitch - this.pitch) * this.cameraSmooth;
+        this.yaw += (this.targetYaw - this.yaw) * this.cameraSmooth;
+        this.radius += (this.targetRadius - this.radius) * this.cameraSmooth;
+        this.viewMat = calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
     }
 
     _resize(width, height) {
@@ -119,14 +188,15 @@ class App {
     }
 
     init() {
-        const attribs = [
-            { name: 'aVertexPosition', size: 3 },
-            { name: 'aUV', size: 2 }
-        ];
+        this.addCameraController(glc.getCanvas());
         // buffer
         this.testVbo = glc.createVertexBuffer(new Float32Array(vertices));
         this.testEbo = glc.createIndexBuffer(new Uint16Array(indices));
         // primitives
+        const attribs = [
+            { name: 'aVertexPosition', size: 3 },
+            { name: 'aUV', size: 2 }
+        ];
         const vertexArrayInfo = [
             { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 0 },
             { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 12 },

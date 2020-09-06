@@ -292,10 +292,10 @@ class WebGLContext {
      * @param {GLsizei} stride the offset in bytes between the beginning of consecutive vertex attributes
      * @param {GLintptr} offset offset in bytes of the first component in the vertex attribute array
      */
-    useVertexBuffer(buffer, index, size, type, stride, offset) {
+    useVertexBuffer(buffer, index, size, type, byteStride, byteOffset) {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.vertexAttribPointer(index, size, type, false, stride, offset);
-        gl.enableVertexAttribArray(index);// ?
+        gl.vertexAttribPointer(index, size, type, false, byteStride, byteOffset);
+        gl.enableVertexAttribArray(index);
     }
 
     // index buffer
