@@ -1,5 +1,6 @@
 import { webGLContext as glc } from './webgl-context.js'
 import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
+import { loadVertexShaderAndFragmentShader, loadImage } from './asset-utils.js'
 
 const vertices = [
     // Front face
@@ -48,26 +49,6 @@ const indices = [
     20, 21, 22, 20, 22, 23    // left
 ];
 
-// assets utils
-function readText(url, callback) {
-    let xhr = new XMLHttpRequest();
-    xhr.open("GET", url);
-    xhr.onload = () => { callback(xhr.responseText); }
-    xhr.send();
-}
-
-function loadVertexShaderAndFragmentShader(vsUrl, fsUrl, callback) {
-    let vsSrc, fsSrc;
-    readText(vsUrl, (src) => { vsSrc = src; if (fsSrc) callback(vsSrc, fsSrc); });
-    readText(fsUrl, (src) => { fsSrc = src; if (vsSrc) callback(vsSrc, fsSrc); });
-}
-
-function loadImage(url, callback) {
-    let img = new Image();
-    img.onload = () => { callback(img) };
-    img.src = url;
-}
-
 class App {
     constructor() {
         this.frame = 0;
@@ -82,7 +63,7 @@ class App {
         this.at = [0, 0, 0];
         this.cameraScaleSpeed = 0.01;
         this.cameraRotSpeed = 0.5;
-        this.cameraSmooth = 0.1;
+        this.cameraSmooth = 10.0;
         this.targetPitch = this.pitch;
         this.targetYaw = this.yaw;
         this.targetRadius = this.radius;
@@ -126,6 +107,7 @@ class App {
             this._handleScale(e.deltaY);
         }
         // for touch screen
+        // todo: use HAMMER.JS
         canvas.addEventListener('touchstart', (e) => {
             if (e.targetTouches.length != 1) return;
             e.preventDefault();
@@ -153,9 +135,10 @@ class App {
     }
 
     updateView() {
-        this.pitch += (this.targetPitch - this.pitch) * this.cameraSmooth;
-        this.yaw += (this.targetYaw - this.yaw) * this.cameraSmooth;
-        this.radius += (this.targetRadius - this.radius) * this.cameraSmooth;
+        let amount = this.cameraSmooth * this.delta;
+        this.pitch += (this.targetPitch - this.pitch) * amount;
+        this.yaw += (this.targetYaw - this.yaw) * amount;
+        this.radius += (this.targetRadius - this.radius) * amount;
         this.viewMat = calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
     }
 

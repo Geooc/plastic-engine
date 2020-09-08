@@ -178,8 +178,8 @@ class WebGLContext {
             alert(gl.getProgramInfoLog(ret._program));
         }
         else {
-            const numUniforms = gl.getProgramParameter(ret._program, gl.ACTIVE_UNIFORMS);
-            for (let i = 0; i < numUniforms; ++i) {
+            const uniformsCount = gl.getProgramParameter(ret._program, gl.ACTIVE_UNIFORMS);
+            for (let i = 0; i < uniformsCount; ++i) {
                 const info = gl.getActiveUniform(ret._program, i);
                 ret._uniformsInfo[info.name] = {
                     size: info.size,
