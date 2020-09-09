@@ -314,8 +314,8 @@ class WebGLContext {
         gl.deleteBuffer(buffer);
     }
 
-    // primitives
-    createPrimitives(primitiveType, attribs, vertexArrayInfo, vertexCount) {
+    // drawcall
+    createDrawcall(primitiveType, attribs, vertexArrayInfo, vertexCount) {
         let ret = {
             _vao: isWebGL2 ? gl.createVertexArray() : gl.createVertexArrayOES(),
             _vertexCount: vertexCount,
@@ -338,21 +338,21 @@ class WebGLContext {
         return ret;
     }
 
-    drawPrimitives(primitives) {
-        isWebGL2 ? gl.bindVertexArray(primitives._vao) : gl.bindVertexArrayOES(primitives._vao);
+    submitDrawcall(drawcall) {
+        isWebGL2 ? gl.bindVertexArray(drawcall._vao) : gl.bindVertexArrayOES(drawcall._vao);
 
-        if (primitives._indicesType) {
-            gl.drawElements(primitives._type, primitives._vertexCount, primitives._indicesType, 0);
+        if (drawcall._indicesType) {
+            gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, 0);
         }
         else {
-            gl.drawArrays(primitives._type, 0, primitives._vertexCount);
+            gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
         }
 
         isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
     }
 
-    destoryPrimitives(primitives) {
-        isWebGL2 ? gl.deleteVertexArrayOES(primitives._vao) : gl.deleteVertexArrayOES(primitives._vao);
+    destoryDrawcall(drawcall) {
+        isWebGL2 ? gl.deleteVertexArrayOES(drawcall._vao) : gl.deleteVertexArrayOES(drawcall._vao);
     }
 }
 

@@ -17,8 +17,7 @@ function loadImage(url, callback) {
     img.src = url;
 }
 
-// gltf
-function loadDataAsArrayBuffer(url, callback) {
+function loadBinaryAsArrayBuffer(url, callback) {
     let xhr = new XMLHttpRequest();
     xhr.open('GET', url);
     xhr.responseType = "blob";
@@ -26,47 +25,35 @@ function loadDataAsArrayBuffer(url, callback) {
         if (xhr.response) {
             let reader = new FileReader();
             reader.readAsArrayBuffer(xhr.response);
-            reader.onload = callback;
+            reader.onload = (e) => {
+                callback(e.target.result);
+            };
         }
-        else alert(`can't load data from ${url}!`);
+        else alert(`can't load ${url}!`);
     };
     xhr.send();
 }
 
-function loadMeshesFromGLTF(gltf, gltfArrayBuffers, scene) {
-    // todo
-}
-
-function loadAnimationsFromGLTF(gltf, gltfArrayBuffers, scene) {
-    // todo
-}
-
-function loadMaterialsFromGLTF(gltf, path, scene) {
-    // todo
-}
-
-function loadSceneFromGLTF(url, callback) {
-    let scene = {};
+function loadGLTF(url, callback) {
     const path = url.slice(0, url.lastIndexOf('/') + 1);
     let xhr = new XMLHttpRequest();
     xhr.open('GET', url);
     xhr.onload = () => {
         const gltf = JSON.parse(xhr.responseText);
-        if (!gltf) alert('wrong gltf file!');
-        // load data refed by gltf
-        //if (!gltf.buffers) return;
+        if (!gltf || !gltf.buffers) {
+            alert('wrong gltf file!');
+            return;
+        }
+        // load buffers first
         let gltfArrayBuffers = new Array(gltf.buffers.length);
-        let loadedBuffersCount = 0;
+        let loadedArrayBuffersCount = 0;
         for (let i = 0; i < gltf.buffers.length; ++i) {
             let gltfArrayBuffer = gltfArrayBuffers[i];
-            loadDataAsArrayBuffer(path + gltf.buffers[i].uri, (e) => {
-                gltfArrayBuffer = e.target.result;
-                // start load after all buffers ready
+            loadBinaryAsArrayBuffer(path + gltf.buffers[i].uri, (arrayBuffer) => {
+                gltfArrayBuffer = arrayBuffer;
+                // create rendering objects
                 if (++loadedArrayBuffersCount == gltf.buffers.length) {
-                    loadMeshesFromGLTF(gltf, gltfArrayBuffers, scene);
-                    loadAnimationsFromGLTF(gltf, gltfArrayBuffers, scene);
-                    loadMaterialsFromGLTF(gltf, path, scene);
-                    callback(scene);
+                    callback(gltf, gltfArrayBuffers);
                 }
             });
         }
@@ -74,4 +61,4 @@ function loadSceneFromGLTF(url, callback) {
     xhr.send();
 }
 
-export { readText, loadVertexShaderAndFragmentShader, loadImage }
+export { readText, loadVertexShaderAndFragmentShader, loadImage, loadBinaryAsArrayBuffer, loadGLTF }

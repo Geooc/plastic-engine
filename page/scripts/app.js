@@ -1,6 +1,6 @@
 import { webGLContext as glc } from './webgl-context.js'
 import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
-import { loadVertexShaderAndFragmentShader, loadImage } from './asset-utils.js'
+import { loadVertexShaderAndFragmentShader, loadImage, loadGLTF } from './asset-utils.js'
 
 const vertices = [
     // Front face
@@ -49,6 +49,55 @@ const indices = [
     20, 21, 22, 20, 22, 23    // left
 ];
 
+// gltf utils
+function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
+    if (!gltf.meshes) {
+        alert('no meshes in gltf!');
+        return null;
+    }
+    const gltfMeshAttribs = [
+        { name: 'aPosition',    size: 3 },
+        { name: 'aNormal',      size: 3 },
+        { name: 'aTangent',     size: 3 },
+        { name: 'aTexcoord0',   size: 2 },
+        { name: 'aTexcoord1',   size: 2 },
+        { name: 'aJoints0',     size: 4 },
+        { name: 'aWeights0',    size: 4 }
+    ];
+    let ret = new Array(gltf.meshes.length);
+    for (let i = 0; i < gltf.meshes.length; ++i) {
+        let mesh = {
+            name: gltf.meshes[i].name,
+            primitives: new Array(gltf.meshes[i].primitives.length),// { drawcall: null, materialId: 0 }
+        };
+        for (let j = 0; j < gltf.meshes[i].primitives.length; ++j) {
+            // todo
+            let vertexArrayInfo = [];
+            let vertexCount = 0;
+            mesh.primitives[j] = {
+                materialId: gltf.meshes[i].primitives[j].material,
+                drawcall: glc.createDrawcall(gltf.meshes[i].primitives[j].mode, gltfMeshAttribs, vertexArrayInfo, vertexCount)
+            };
+        }
+        
+        ret[i] = mesh;
+    }
+
+    return ret;
+}
+
+function createAnimationsFromGLTF(gltf, gltfArrayBuffers) {
+    // todo
+}
+
+function createMaterialsFromGLTF(gltf, gltfPath) {
+    // todo
+}
+
+function drawSceneFromGLTF(gltf, meshes, animations, materials) {
+    // todo
+}
+
 class App {
     constructor() {
         this.frame = 0;
@@ -72,9 +121,9 @@ class App {
         this.viewMat = calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
     }
 
-    _recordStart(startX, startY) {
-        this.startX = startX;
-        this.startY = startY;
+    _recordStart(x, y) {
+        this.startX = x;
+        this.startY = y;
         this.recordPitch = this.pitch;
         this.recordYaw = this.yaw;
     }
@@ -166,7 +215,7 @@ class App {
                 uProj: this.projMat,
                 uTestTex: this.testTexture,
             });
-            glc.drawPrimitives(this.primitives);
+            glc.submitDrawcall(this.drawcall);
         }
     }
 
@@ -175,7 +224,7 @@ class App {
         // buffer
         this.testVbo = glc.createVertexBuffer(new Float32Array(vertices));
         this.testEbo = glc.createIndexBuffer(new Uint16Array(indices));
-        // primitives
+        // drawcall
         const attribs = [
             { name: 'aVertexPosition', size: 3 },
             { name: 'aUV', size: 2 }
@@ -185,13 +234,18 @@ class App {
             { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 12 },
             { buffer: this.testEbo, type: glc.dataType.USHORT }
         ];
-        this.primitives = glc.createPrimitives(glc.primitiveType.TRIANGLES, attribs, vertexArrayInfo, 36);
+        this.drawcall = glc.createDrawcall(glc.primitiveType.TRIANGLES, attribs, vertexArrayInfo, 36);
         // shader
         loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
             this.testShader = glc.createShaderProgram('test', attribs, vsSrc, fsSrc);
         });
         // texture
         loadImage('@images/test.jpg', (img) => { this.testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); });
+        // gltf
+        loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
+            // todo
+            console.log(gltf);
+        });
     }
 
     tick(now) {
@@ -206,7 +260,7 @@ class App {
     //     glc.destoryBuffer(this.testVbo);
     //     glc.destoryBuffer(this.testEbo);
     //     glc.destoryTexture(this.testTexture);
-    //     glc.destoryPrimitives(this.primitives);
+    //     glc.destoryDrawcall(this.drawcall);
     //     glc.destoryShaderProgram(this.testShader);
     // }
 }
