@@ -1,53 +1,24 @@
-import { renderContext as rc } from './webgl-context.js'
+import { renderContext as rc } from './render-context.js'
 import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
 import { loadVertexShaderAndFragmentShader, loadImage, loadGLTF } from './asset-utils.js'
 
-const vertices = [
-    // Front face
-    -1.0, -1.0, 1.0, 0.0, 0.0,
-    1.0, -1.0, 1.0, 1.0, 0.0,
-    1.0, 1.0, 1.0, 1.0, 1.0,
-    -1.0, 1.0, 1.0, 0.0, 1.0,
+const convertAttributeName = {
+    POSITION    : 'aLocalPosition',
+    NORMAL      : 'aWorldNormal',
+    TANGENT     : 'aWorldTangent',
+    TEXCOORD_0  : 'aUV0',
+    TEXCOORD_1  : 'aUV1',
+    TEXCOORD_2  : 'aUV2',
+    JOINTS_0    : 'aJoints',
+    WEIGHTS_0   : 'aWeights'
+};
 
-    // Back face
-    -1.0, -1.0, -1.0, 0.0, 0.0,
-    -1.0, 1.0, -1.0, 1.0, 0.0,
-    1.0, 1.0, -1.0, 1.0, 1.0,
-    1.0, -1.0, -1.0, 0.0, 1.0,
-
-    // Top face
-    -1.0, 1.0, -1.0, 0.0, 0.0,
-    -1.0, 1.0, 1.0, 1.0, 0.0,
-    1.0, 1.0, 1.0, 1.0, 1.0,
-    1.0, 1.0, -1.0, 0.0, 1.0,
-
-    // Bottom face
-    -1.0, -1.0, -1.0, 0.0, 0.0,
-    1.0, -1.0, -1.0, 1.0, 0.0,
-    1.0, -1.0, 1.0, 1.0, 1.0,
-    -1.0, -1.0, 1.0, 0.0, 1.0,
-
-    // Right face
-    1.0, -1.0, -1.0, 0.0, 0.0,
-    1.0, 1.0, -1.0, 1.0, 0.0,
-    1.0, 1.0, 1.0, 1.0, 1.0,
-    1.0, -1.0, 1.0, 0.0, 1.0,
-
-    // Left face
-    -1.0, -1.0, -1.0, 0.0, 0.0,
-    -1.0, -1.0, 1.0, 1.0, 0.0,
-    -1.0, 1.0, 1.0, 1.0, 1.0,
-    -1.0, 1.0, -1.0, 0.0, 1.0
-];
-
-const indices = [
-    0, 1, 2, 0, 2, 3,    // front
-    4, 5, 6, 4, 6, 7,    // back
-    8, 9, 10, 8, 10, 11,   // top
-    12, 13, 14, 12, 14, 15,   // bottom
-    16, 17, 18, 16, 18, 19,   // right
-    20, 21, 22, 20, 22, 23    // left
-];
+const convertAttributeSize = {
+    SCALAR  : 1,
+    VEC2    : 2,
+    VEC3    : 3,
+    VEC4    : 4
+};
 
 // gltf utils
 function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
@@ -55,26 +26,92 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
         alert('no meshes in gltf!');
         return null;
     }
-    let ret = new Array(gltf.meshes.length);
+    // create buffers
+    let typedArrays = new Array(gltf.bufferViews.length);
+    let buffers = new Array(gltf.bufferViews.length);
+    for (let i = 0; i < gltf.bufferViews.length; ++i) {
+        const bufferView = gltf.bufferViews[i];
+        typedArrays[i] = new Int8Array(gltfArrayBuffers[bufferView.buffer], bufferView.byteOffset ? bufferView.byteOffset : 0, bufferView.byteLength);
+        // if (bufferView.target) {
+        //     buffers[i] = rc.createBuffer(bufferView.target, typedArrays[i]);
+        // }
+    }
+    let boundingMin = [null, null, null];
+    let boundingMax = [null, null, null];
+    let meshes = new Array(gltf.meshes.length);
     for (let i = 0; i < gltf.meshes.length; ++i) {
         let mesh = {
             name: gltf.meshes[i].name,
             primitives: new Array(gltf.meshes[i].primitives.length),
         };
         for (let j = 0; j < gltf.meshes[i].primitives.length; ++j) {
-            // todo
-            let vertexCount = 0;
+            let vertexCount = null;
             let attribsInfo = {};
+            const primitive = gltf.meshes[i].primitives[j];
+            if (!primitive || !primitive.attributes) {
+                alert('no attributes in primitive!');
+            }
+            for (const attribName in primitive.attributes) {
+                const accessor = gltf.accessors[primitive.attributes[attribName]];
+                const bufferByteStride = gltf.bufferViews[accessor.bufferView].byteStride;
+                // bounding box
+                if (attribName == 'POSITION') {
+                    for (let i = 0; i < 3; i++) {
+                        boundingMin[i] = boundingMin[i] ? Math.min(boundingMin[i], accessor.min[i]) : accessor.min[i];
+                        boundingMax[i] = boundingMax[i] ? Math.max(boundingMax[i], accessor.max[i]) : accessor.max[i];
+                    }
+                }
+                // lazy create buffer
+                if (!buffers[accessor.bufferView]) {
+                    buffers[accessor.bufferView] = rc.createBuffer(rc.bufferType.VERTEX, typedArrays[accessor.bufferView]);
+                }
+                // set attribute info
+                attribsInfo[convertAttributeName[attribName]] = {
+                    buffer: buffers[accessor.bufferView],
+                    size: convertAttributeSize[accessor.type],
+                    type: accessor.componentType,
+                    byteStride: bufferByteStride ? bufferByteStride : 0,
+                    byteOffset: accessor.byteOffset ? accessor.byteOffset : 0
+                };
+                vertexCount = vertexCount ? Math.min(vertexCount, accessor.count) : accessor.count;
+            }
+            if (primitive.indices) {
+                const accessor = gltf.accessors[primitive.indices];
+                if (!buffers[accessor.bufferView]) {
+                    buffers[accessor.bufferView] = rc.createBuffer(rc.bufferType.INDEX, typedArrays[accessor.bufferView]);
+                }
+                attribsInfo['indices'] = {
+                    buffer: buffers[accessor.bufferView],
+                    type: accessor.componentType,
+                    byteOffset: accessor.byteOffset ? accessor.byteOffset : 0
+                };
+                vertexCount = accessor.count;
+            }
             mesh.primitives[j] = {
                 materialId: gltf.meshes[i].primitives[j].material,
-                drawcall: rc.createDrawcall(gltf.meshes[i].primitives[j].mode, vertexCount, attribsInfo)
+                drawcall: rc.createDrawcall(gltf.meshes[i].primitives[j].mode ? gltf.meshes[i].primitives[j].mode : rc.primitiveType.TRIANGLES, vertexCount, attribsInfo),
             };
         }
-        
-        ret[i] = mesh;
+        meshes[i] = mesh;
     }
 
-    return ret;
+    return {
+        meshes: meshes,
+        boundingMin: boundingMin,
+        boundingMax: boundingMax,
+        buffers: buffers
+    };
+}
+
+function destoryMeshes(meshes) {
+    for (const mesh in meshes.meshes) {
+        for (const primitive in mesh) {
+            rc.destoryDrawcall(primitive.drawcall);
+        }
+    }
+    for (const buffer in meshes.buffers) {
+        rc.destoryBuffer(buffer);
+    }
 }
 
 function createAnimationsFromGLTF(gltf, gltfArrayBuffers) {
@@ -85,8 +122,14 @@ function createMaterialsFromGLTF(gltf, gltfPath) {
     // todo
 }
 
-function drawSceneFromGLTF(gltf, meshes, animations, materials) {
-    // todo
+function createSceneGraph(gltf) {
+    let root = {
+        name: gltf.scenes[gltf.scene].name,
+        children: gltf.scenes[gltf.scene].nodes
+    };
+    for (let i = 0; i < gltf.nodes.length; ++i) {
+        //
+    }
 }
 
 class App {
@@ -200,31 +243,27 @@ class App {
     drawScene() {
         rc.clearColorAndDepth();
 
-        const testCmd = {
-            parameters : {
-                uView: this.viewMat,
-                uProj: this.projMat,
-                uTestTex: this.testTexture,
-            },
-            drawcall: this.drawcall
+        const testParams = {
+            uView: this.viewMat,
+            uProj: this.projMat,
+            uTestTex: this.testTexture
         };
 
+        const meshes = this.meshes ? this.meshes.meshes : null;
         rc.execRenderPass(this.testPass, function* () {
-            yield testCmd;
+            for (const meshId in meshes) {
+                for (const primitiveId in meshes[meshId].primitives) {
+                    yield {
+                        parameters: testParams,
+                        drawcall: meshes[meshId].primitives[primitiveId].drawcall
+                    };
+                }
+            }
         });
     }
 
     init() {
         this.addCameraController(rc.getCanvas());
-        // buffer
-        this.testVbo = rc.createVertexBuffer(new Float32Array(vertices));
-        this.testEbo = rc.createIndexBuffer(new Uint16Array(indices));
-        // drawcall
-        this.drawcall = rc.createDrawcall(rc.primitiveType.TRIANGLES, 36, {
-            aLocalPosition  : { buffer : this.testVbo, size: 3, type : rc.dataType.FLOAT, byteStride : 20, byteOffset : 0 },
-            aUV             : { buffer : this.testVbo, size: 2, type : rc.dataType.FLOAT, byteStride : 20, byteOffset : 12},
-            indices         : { buffer : this.testEbo, type : rc.dataType.USHORT }
-        });
         // renderpass
         loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
             this.testPass = rc.createRenderPass('test', vsSrc, fsSrc);
@@ -233,8 +272,21 @@ class App {
         loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
         // gltf
         loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
+            this.meshes = createMeshesFromGLTF(gltf, gltfArrayBuffers);
+            this.at = [
+                (this.meshes.boundingMax[0] + this.meshes.boundingMin[0]) / 2,
+                (this.meshes.boundingMax[1] + this.meshes.boundingMin[1]) / 2,
+                (this.meshes.boundingMax[2] + this.meshes.boundingMin[2]) / 2,
+            ];
+            this.targetRadius = Math.max(
+                this.meshes.boundingMax[0] - this.meshes.boundingMin[0],
+                Math.max(
+                    this.meshes.boundingMax[1] - this.meshes.boundingMin[1],
+                    this.meshes.boundingMax[2] - this.meshes.boundingMin[2],
+                )
+            ) / 2;
+            this.cameraScaleSpeed = this.targetRadius / 100;
             // todo
-            console.log(gltf);
         });
     }
 

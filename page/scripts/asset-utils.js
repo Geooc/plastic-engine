@@ -48,10 +48,8 @@ function loadGLTF(url, callback) {
         let gltfArrayBuffers = new Array(gltf.buffers.length);
         let loadedArrayBuffersCount = 0;
         for (let i = 0; i < gltf.buffers.length; ++i) {
-            let gltfArrayBuffer = gltfArrayBuffers[i];
             loadBinaryAsArrayBuffer(path + gltf.buffers[i].uri, (arrayBuffer) => {
-                gltfArrayBuffer = arrayBuffer;
-                // create rendering objects
+                gltfArrayBuffers[i] = arrayBuffer;
                 if (++loadedArrayBuffersCount == gltf.buffers.length) {
                     callback(gltf, gltfArrayBuffers);
                 }

@@ -40,6 +40,8 @@ function openProject(projectPath) {
                         break;
                     case 'glsl':
                         res.setHeader('Content-Type', 'text/plain');
+                    case 'gltf':
+                        res.setHeader('Content-Type', 'application/json');
                     default:
                         break;
                 }

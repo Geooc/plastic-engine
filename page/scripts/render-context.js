@@ -68,6 +68,11 @@ class RenderContext {
             FLOAT       : gl.FLOAT
         };
 
+        this.bufferType = {
+            VERTEX      : gl.ARRAY_BUFFER,
+            INDEX       : gl.ELEMENT_ARRAY_BUFFER
+        }
+
         this.primitiveType = {
             POINTS          : gl.POINTS,
             LINE_STRIP      : gl.LINE_STRIP,
@@ -192,7 +197,7 @@ class RenderContext {
                         }
                     }
                     const vs = compileShader(gl.VERTEX_SHADER, header + vsAttribs + renderPass._vsSrc);
-                    console.log(header + vsAttribs + renderPass._vsSrc);
+                    //console.log(`compile shader [${drawcall._shaderKey}]\n` + header + vsAttribs + renderPass._vsSrc);
                     const fs = compileShader(gl.FRAGMENT_SHADER, header + renderPass._fsSrc);
                     gl.attachShader(shader._program, vs);
                     gl.attachShader(shader._program, fs);
@@ -287,7 +292,7 @@ class RenderContext {
                 isWebGL2 ? gl.bindVertexArray(drawcall._vao) : gl.bindVertexArrayOES(drawcall._vao);
 
                 if (drawcall._indicesType) {
-                    gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, 0);
+                    gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, drawcall._indicesOffset);
                 }
                 else {
                     gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
@@ -304,26 +309,18 @@ class RenderContext {
             gl.deleteProgram(shader._program);
         }
     }
-    // vertex buffer
-    createVertexBuffer(data) {
-        const vbo = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-        return vbo;
+    // buffer
+    createBuffer(bufferType, data) {
+        const buffer = gl.createBuffer();
+        gl.bindBuffer(bufferType, buffer);
+        gl.bufferData(bufferType, data, gl.STATIC_DRAW);
+        return buffer;
     }
 
     useVertexBuffer(buffer, index, size, type, byteStride, byteOffset) {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.vertexAttribPointer(index, size, type, false, byteStride, byteOffset);
         gl.enableVertexAttribArray(index);
-    }
-
-    // index buffer
-    createIndexBuffer(data) {
-        const ebo = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
-        return ebo;
     }
 
     useIndexBuffer(buffer) {
@@ -342,6 +339,7 @@ class RenderContext {
             _vertexCount: vertexCount,
             _type: primitiveType,
             _indicesType: 0,
+            _indicesOffset: 0,
             _shaderKey: ''
         }
         isWebGL2 ? gl.bindVertexArray(ret._vao) : gl.bindVertexArrayOES(ret._vao);
@@ -351,6 +349,7 @@ class RenderContext {
             if (attribName == 'indices') {
                 this.useIndexBuffer(attribsInfo[attribName].buffer);
                 ret._indicesType = attribsInfo[attribName].type;
+                ret._indicesOffset = attribsInfo[attribName].byteOffset ? attribsInfo[attribName].byteOffset : 0;
             }
             else {
                 ret._shaderKey += `${attribIndex}${attribName}`;
