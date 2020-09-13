@@ -75,18 +75,17 @@ if (args[0]) {
     let projectPath = args[1] ? path.join(process.cwd(), args[1]) : process.cwd();
     if (args[0] == 'new') {
         newProject(projectPath);
+        return;
     }
     else if (args[0] == 'open') {
         openProject(projectPath);
+        return;
     }
     else if (args[0] == 'build') {
         buildProject(projectPath);
-    }
-    else {
-        console.log('Wrong parameter(s)');
+        return;
     }
 }
-else {
-    // todo: print help
-    console.log('Help');
-}
+
+// todo: print help
+console.log('Help');
