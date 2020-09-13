@@ -1,4 +1,4 @@
-import { webGLContext as glc } from './webgl-context.js'
+import { renderContext as rc } from './webgl-context.js'
 import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
 import { loadVertexShaderAndFragmentShader, loadImage, loadGLTF } from './asset-utils.js'
 
@@ -55,28 +55,19 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
         alert('no meshes in gltf!');
         return null;
     }
-    const gltfMeshAttribs = [
-        { name: 'aPosition',    size: 3 },
-        { name: 'aNormal',      size: 3 },
-        { name: 'aTangent',     size: 3 },
-        { name: 'aTexcoord0',   size: 2 },
-        { name: 'aTexcoord1',   size: 2 },
-        { name: 'aJoints0',     size: 4 },
-        { name: 'aWeights0',    size: 4 }
-    ];
     let ret = new Array(gltf.meshes.length);
     for (let i = 0; i < gltf.meshes.length; ++i) {
         let mesh = {
             name: gltf.meshes[i].name,
-            primitives: new Array(gltf.meshes[i].primitives.length),// { drawcall: null, materialId: 0 }
+            primitives: new Array(gltf.meshes[i].primitives.length),
         };
         for (let j = 0; j < gltf.meshes[i].primitives.length; ++j) {
             // todo
-            let vertexArrayInfo = [];
             let vertexCount = 0;
+            let attribsInfo = {};
             mesh.primitives[j] = {
                 materialId: gltf.meshes[i].primitives[j].material,
-                drawcall: glc.createDrawcall(gltf.meshes[i].primitives[j].mode, gltfMeshAttribs, vertexArrayInfo, vertexCount)
+                drawcall: rc.createDrawcall(gltf.meshes[i].primitives[j].mode, vertexCount, attribsInfo)
             };
         }
         
@@ -193,7 +184,7 @@ class App {
 
     _resize(width, height) {
         this.projMat = calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
-        glc.setViewport(0, 0, width, height);
+        rc.setViewport(0, 0, width, height);
     }
 
     checkSize(canvas) {
@@ -207,40 +198,39 @@ class App {
     }
 
     drawScene() {
-        glc.clearColorAndDepth();
+        rc.clearColorAndDepth();
 
-        if (glc.useShaderProgram(this.testShader) && this.testTexture) {
-            glc.setShaderParameters({
+        const testCmd = {
+            parameters : {
                 uView: this.viewMat,
                 uProj: this.projMat,
                 uTestTex: this.testTexture,
-            });
-            glc.submitDrawcall(this.drawcall);
-        }
+            },
+            drawcall: this.drawcall
+        };
+
+        rc.execRenderPass(this.testPass, function* () {
+            yield testCmd;
+        });
     }
 
     init() {
-        this.addCameraController(glc.getCanvas());
+        this.addCameraController(rc.getCanvas());
         // buffer
-        this.testVbo = glc.createVertexBuffer(new Float32Array(vertices));
-        this.testEbo = glc.createIndexBuffer(new Uint16Array(indices));
+        this.testVbo = rc.createVertexBuffer(new Float32Array(vertices));
+        this.testEbo = rc.createIndexBuffer(new Uint16Array(indices));
         // drawcall
-        const attribs = [
-            { name: 'aVertexPosition', size: 3 },
-            { name: 'aUV', size: 2 }
-        ];
-        const vertexArrayInfo = [
-            { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 0 },
-            { buffer: this.testVbo, type: glc.dataType.FLOAT, byteStride: 20, byteOffset: 12 },
-            { buffer: this.testEbo, type: glc.dataType.USHORT }
-        ];
-        this.drawcall = glc.createDrawcall(glc.primitiveType.TRIANGLES, attribs, vertexArrayInfo, 36);
-        // shader
+        this.drawcall = rc.createDrawcall(rc.primitiveType.TRIANGLES, 36, {
+            aLocalPosition  : { buffer : this.testVbo, size: 3, type : rc.dataType.FLOAT, byteStride : 20, byteOffset : 0 },
+            aUV             : { buffer : this.testVbo, size: 2, type : rc.dataType.FLOAT, byteStride : 20, byteOffset : 12},
+            indices         : { buffer : this.testEbo, type : rc.dataType.USHORT }
+        });
+        // renderpass
         loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
-            this.testShader = glc.createShaderProgram('test', attribs, vsSrc, fsSrc);
+            this.testPass = rc.createRenderPass('test', vsSrc, fsSrc);
         });
         // texture
-        loadImage('@images/test.jpg', (img) => { this.testTexture = glc.createTextureRGBA8(img, glc.filterType.ANISOTROPIC); });
+        loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
         // gltf
         loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
             // todo
@@ -251,17 +241,17 @@ class App {
     tick(now) {
         this.updateTime(now);
         this.updateView();
-        this.checkSize(glc.getCanvas());
+        this.checkSize(rc.getCanvas());
 
         this.drawScene();
     }
 
     // quit() {
-    //     glc.destoryBuffer(this.testVbo);
-    //     glc.destoryBuffer(this.testEbo);
-    //     glc.destoryTexture(this.testTexture);
-    //     glc.destoryDrawcall(this.drawcall);
-    //     glc.destoryShaderProgram(this.testShader);
+    //     rc.destoryBuffer(this.testVbo);
+    //     rc.destoryBuffer(this.testEbo);
+    //     rc.destoryTexture(this.testTexture);
+    //     rc.destoryDrawcall(this.drawcall);
+    //     rc.destoryShaderProgram(this.testShader);
     // }
 }
 

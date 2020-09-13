@@ -16,7 +16,7 @@ function useExtension(name) {
     const ext = gl.getExtension(name);
     if (!ext) return false;
     for (const prop in ext) {
-        gl[prop] = typeof(ext[prop]) === 'function' ? () => {return ext[prop]} : ext[prop];
+        gl[prop] = typeof (ext[prop]) === 'function' ? () => { return ext[prop] } : ext[prop];
     }
     return true;
 }
@@ -38,7 +38,7 @@ function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 }
 
-class WebGLContext {
+class RenderContext {
     constructor() {
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clearDepth(1.0);
@@ -77,8 +77,6 @@ class WebGLContext {
             TRIANGLE_FAN    : gl.TRIANGLE_FAN,
             TRIANGLES       : gl.TRIANGLES
         };
-
-        this._curShaderProgram = null;
     }
 
     getCanvas() {
@@ -149,132 +147,163 @@ class WebGLContext {
         gl.deleteTexture(texture);
     }
 
-    // shader
-    createShaderProgram(name, attribs, vsSrc, fsSrc) {
+    // render pass
+    createRenderPass(name, vsSrc, fsSrc, outputsInfo) {
         let ret = {
-            _name: name,
-            _program: gl.createProgram(),
-            _uniformsInfo: {}
+            name: name,
+            _vsSrc: vsSrc,
+            _fsSrc: fsSrc,
+            _shaderMap: {}
         };
-
-        const header = 'precision mediump float;\n';
-
-        let attribsStr = '';
-        for (let i = 0; i < attribs.length; ++i) {
-            let typeStr = attribs[i].size ? `vec${attribs[i].size}` : 'float';
-            attribsStr += `attribute ${typeStr} ${attribs[i].name};\n`;
-            gl.bindAttribLocation(ret._program, i, attribs[i].name);
-        }
-
-        const vs = compileShader(gl.VERTEX_SHADER, header + attribsStr + vsSrc);
-        const fs = compileShader(gl.FRAGMENT_SHADER, header + fsSrc);
-        gl.attachShader(ret._program, vs);
-        gl.attachShader(ret._program, fs);
-        gl.linkProgram(ret._program);
-        gl.deleteShader(vs);
-        gl.deleteShader(fs);
-
-        if (!gl.getProgramParameter(ret._program, gl.LINK_STATUS)) {
-            alert(gl.getProgramInfoLog(ret._program));
-        }
-        else {
-            const uniformsCount = gl.getProgramParameter(ret._program, gl.ACTIVE_UNIFORMS);
-            for (let i = 0; i < uniformsCount; ++i) {
-                const info = gl.getActiveUniform(ret._program, i);
-                ret._uniformsInfo[info.name] = {
-                    size: info.size,
-                    type: info.type,
-                    loc: gl.getUniformLocation(ret._program, info.name)
-                };
-            }
-        }
-
         return ret;
     }
 
-    useShaderProgram(shaderProgram) {
-        if (!shaderProgram) return false;
+    execRenderPass(renderPass, cmdGenerator) {
+        if (!renderPass) return;
         const err = gl.getError();
         if (err != gl.NO_ERROR) {
-            console.log(`Error ${err} caught before using shader <${shaderProgram._name}>`);
+            console.log(`Error ${err} caught before RenderPass <${renderPass.name}>`);
         }
-        gl.useProgram(shaderProgram._program);
-        this._curShaderProgram = shaderProgram;
-        return true;
-    }
+        let cmdList = cmdGenerator();
+        for (const cmd of cmdList) {
+            const drawcall = cmd.drawcall;
+            const parameters = cmd.parameters;
+            const states = cmd.states;// not in use yet
+            if (drawcall) {
+                // todo: set states
 
-    setShaderParameters(params) {
-        if (!this._curShaderProgram) return;
-        let texSlot = 0;
-        for (const name in params) {
-            if (this._curShaderProgram._uniformsInfo[name]) {
-                const loc = this._curShaderProgram._uniformsInfo[name].loc;
-                const size = this._curShaderProgram._uniformsInfo[name].size;
-                const type = this._curShaderProgram._uniformsInfo[name].type;
-                const value = params[name];
-                switch (type) {
-                    case gl.FLOAT:
-                        if (size > 1) { gl.uniform1fv(loc, value); break; }
-                        gl.uniform1f(loc, value);
-                        break;
-                    case gl.FLOAT_VEC2:
-                        if (size > 1) { gl.uniform2fv(loc, value); break; }
-                        gl.uniform2f(loc, value[0], value[1]);
-                        break;
-                    case gl.FLOAT_VEC3:
-                        if (size > 1) { gl.uniform3fv(loc, value); break; }
-                        gl.uniform3f(loc, value[0], value[1], value[2]);
-                        break;
-                    case gl.FLOAT_VEC4:
-                        if (size > 1) { gl.uniform4fv(loc, value); break; }
-                        gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
-                        break;
-                    case gl.INT:
-                    case gl.BOOL:
-                        if (size > 1) { gl.uniform1iv(loc, value); break; }
-                        gl.uniform1i(loc, value);
-                        break;
-                    case gl.INT_VEC2:
-                    case gl.BOOL_VEC2:
-                        if (size > 1) { gl.uniform2iv(loc, value); break; }
-                        gl.uniform2i(loc, value[0], value[1]);
-                        break;
-                    case gl.INT_VEC3:
-                    case gl.BOOL_VEC3:
-                        if (size > 1) { gl.uniform3iv(loc, value); break; }
-                        gl.uniform3i(loc, value[0], value[1], value[2]);
-                        break;
-                    case gl.INT_VEC4:
-                    case gl.BOOL_VEC4:
-                        if (size > 1) { gl.uniform4iv(loc, value); break; }
-                        gl.uniform4i(loc, value[0], value[1], value[2], value[3]);
-                        break;
-                    case gl.FLOAT_MAT2:
-                        gl.uniformMatrix2fv(loc, false, value);
-                        break;
-                    case gl.FLOAT_MAT3:
-                        gl.uniformMatrix3fv(loc, false, value);
-                        break;
-                    case gl.FLOAT_MAT4:
-                        gl.uniformMatrix4fv(loc, false, value);
-                        break;
-                    case gl.SAMPLER_2D:
-                    case gl.SAMPLER_CUBE:
-                        this.useTexture(value, texSlot);
-                        gl.uniform1i(loc, texSlot);
-                        ++texSlot;
-                        break;
-                    default:
-                        break;
+                let shader = renderPass._shaderMap[drawcall._shaderKey];
+                // lazy compile shader
+                if (!shader) {
+                    shader = {
+                        _program: gl.createProgram(),
+                        _uniforms: {}
+                    };
+
+                    let header = 'precision mediump float;\n';
+                    let vsAttribs = '';
+                    let attribIndex = 0;
+                    for (const attribName in drawcall._attribsInfo) {
+                        if (attribName != 'indices') {
+                            header += `#define USE_ATTRIB_${drawcall._attribsInfo[attribName].size > 1 ? `VEC${drawcall._attribsInfo[attribName].size}` : 'SCALAR'}`;
+                            header += `${attribName.replace(/(^[a-z][a-z]?|[A-Z][A-Z]?)/g, '_$1').toUpperCase()} 1\n`;
+                            vsAttribs += `attribute ${drawcall._attribsInfo[attribName].size > 1 ? `vec${drawcall._attribsInfo[attribName].size}` : 'float'} ${attribName};\n`;
+                            gl.bindAttribLocation(shader._program, attribIndex++, attribName);
+                        }
+                    }
+                    const vs = compileShader(gl.VERTEX_SHADER, header + vsAttribs + renderPass._vsSrc);
+                    console.log(header + vsAttribs + renderPass._vsSrc);
+                    const fs = compileShader(gl.FRAGMENT_SHADER, header + renderPass._fsSrc);
+                    gl.attachShader(shader._program, vs);
+                    gl.attachShader(shader._program, fs);
+                    gl.linkProgram(shader._program);
+                    gl.deleteShader(vs);
+                    gl.deleteShader(fs);
+
+                    if (!gl.getProgramParameter(shader._program, gl.LINK_STATUS)) {
+                        alert(gl.getProgramInfoLog(shader._program));
+                    }
+                    else {
+                        const uniformsCount = gl.getProgramParameter(shader._program, gl.ACTIVE_UNIFORMS);
+                        for (let i = 0; i < uniformsCount; ++i) {
+                            const info = gl.getActiveUniform(shader._program, i);
+                            shader._uniforms[info.name] = {
+                                size: info.size,
+                                type: info.type,
+                                loc: gl.getUniformLocation(shader._program, info.name)
+                            };
+                        }
+                    }
+                    renderPass._shaderMap[drawcall._shaderKey] = shader;
                 }
+                gl.useProgram(shader._program);
+                // set parameters
+                if (parameters) {
+                    let textureSlot = 0;
+                    for (const name in parameters) {
+                        if (shader._uniforms[name]) {
+                            const loc = shader._uniforms[name].loc;
+                            const size = shader._uniforms[name].size;
+                            const type = shader._uniforms[name].type;
+                            const value = parameters[name];
+                            switch (type) {
+                                case gl.FLOAT:
+                                    if (size > 1) { gl.uniform1fv(loc, value); break; }
+                                    gl.uniform1f(loc, value);
+                                    break;
+                                case gl.FLOAT_VEC2:
+                                    if (size > 1) { gl.uniform2fv(loc, value); break; }
+                                    gl.uniform2f(loc, value[0], value[1]);
+                                    break;
+                                case gl.FLOAT_VEC3:
+                                    if (size > 1) { gl.uniform3fv(loc, value); break; }
+                                    gl.uniform3f(loc, value[0], value[1], value[2]);
+                                    break;
+                                case gl.FLOAT_VEC4:
+                                    if (size > 1) { gl.uniform4fv(loc, value); break; }
+                                    gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
+                                    break;
+                                case gl.INT:
+                                case gl.BOOL:
+                                    if (size > 1) { gl.uniform1iv(loc, value); break; }
+                                    gl.uniform1i(loc, value);
+                                    break;
+                                case gl.INT_VEC2:
+                                case gl.BOOL_VEC2:
+                                    if (size > 1) { gl.uniform2iv(loc, value); break; }
+                                    gl.uniform2i(loc, value[0], value[1]);
+                                    break;
+                                case gl.INT_VEC3:
+                                case gl.BOOL_VEC3:
+                                    if (size > 1) { gl.uniform3iv(loc, value); break; }
+                                    gl.uniform3i(loc, value[0], value[1], value[2]);
+                                    break;
+                                case gl.INT_VEC4:
+                                case gl.BOOL_VEC4:
+                                    if (size > 1) { gl.uniform4iv(loc, value); break; }
+                                    gl.uniform4i(loc, value[0], value[1], value[2], value[3]);
+                                    break;
+                                case gl.FLOAT_MAT2:
+                                    gl.uniformMatrix2fv(loc, false, value);
+                                    break;
+                                case gl.FLOAT_MAT3:
+                                    gl.uniformMatrix3fv(loc, false, value);
+                                    break;
+                                case gl.FLOAT_MAT4:
+                                    gl.uniformMatrix4fv(loc, false, value);
+                                    break;
+                                case gl.SAMPLER_2D:
+                                case gl.SAMPLER_CUBE:
+                                    this.useTexture(value, textureSlot);
+                                    gl.uniform1i(loc, textureSlot++);
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                }
+                // submit drawcall
+                isWebGL2 ? gl.bindVertexArray(drawcall._vao) : gl.bindVertexArrayOES(drawcall._vao);
+
+                if (drawcall._indicesType) {
+                    gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, 0);
+                }
+                else {
+                    gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
+                }
+
+                isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
             }
         }
+
     }
 
-    destoryShaderProgram(shaderProgram) {
-        gl.deleteProgram(shaderProgram._program);
+    destoryRenderPass(renderPass) {
+        for (const shader in _shaderMap) {
+            gl.deleteProgram(shader._program);
+        }
     }
-
     // vertex buffer
     createVertexBuffer(data) {
         const vbo = gl.createBuffer();
@@ -283,15 +312,6 @@ class WebGLContext {
         return vbo;
     }
 
-    /**
-     * 
-     * @param {WebGLBuffer} buffer the vertex buffer to bind
-     * @param {GLuint} index the index of the vertex attribute
-     * @param {GLint} size the number of components per vertex attribute
-     * @param {GLenum} type the data type of each component in the array
-     * @param {GLsizei} stride the offset in bytes between the beginning of consecutive vertex attributes
-     * @param {GLintptr} offset offset in bytes of the first component in the vertex attribute array
-     */
     useVertexBuffer(buffer, index, size, type, byteStride, byteOffset) {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.vertexAttribPointer(index, size, type, false, byteStride, byteOffset);
@@ -315,40 +335,35 @@ class WebGLContext {
     }
 
     // drawcall
-    createDrawcall(primitiveType, attribs, vertexArrayInfo, vertexCount) {
+    createDrawcall(primitiveType, vertexCount, attribsInfo) {
         let ret = {
             _vao: isWebGL2 ? gl.createVertexArray() : gl.createVertexArrayOES(),
+            _attribsInfo: attribsInfo,
             _vertexCount: vertexCount,
             _type: primitiveType,
-            _indicesType: 0
+            _indicesType: 0,
+            _shaderKey: ''
         }
         isWebGL2 ? gl.bindVertexArray(ret._vao) : gl.bindVertexArrayOES(ret._vao);
-        if (vertexArrayInfo.length > (attribs.length + 1)) alert('wrong size of vertexArrayInfo!');
-        for (let i = 0; i < vertexArrayInfo.length; ++i) {
-            if (!vertexArrayInfo[i]) continue;
-            if (attribs[i]) {
-                this.useVertexBuffer(vertexArrayInfo[i].buffer, i, attribs[i].size, vertexArrayInfo[i].type, vertexArrayInfo[i].byteStride, vertexArrayInfo[i].byteOffset);
+
+        let attribIndex = 0;
+        for (const attribName in attribsInfo) {
+            if (attribName == 'indices') {
+                this.useIndexBuffer(attribsInfo[attribName].buffer);
+                ret._indicesType = attribsInfo[attribName].type;
             }
             else {
-                this.useIndexBuffer(vertexArrayInfo[i].buffer);
-                ret._indicesType = vertexArrayInfo[i].type;
+                ret._shaderKey += `${attribIndex}${attribName}`;
+                this.useVertexBuffer(
+                    attribsInfo[attribName].buffer, attribIndex++,
+                    attribsInfo[attribName].size, attribsInfo[attribName].type,
+                    attribsInfo[attribName].byteStride, attribsInfo[attribName].byteOffset
+                );
             }
         }
+
         isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
         return ret;
-    }
-
-    submitDrawcall(drawcall) {
-        isWebGL2 ? gl.bindVertexArray(drawcall._vao) : gl.bindVertexArrayOES(drawcall._vao);
-
-        if (drawcall._indicesType) {
-            gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, 0);
-        }
-        else {
-            gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
-        }
-
-        isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
     }
 
     destoryDrawcall(drawcall) {
@@ -356,6 +371,6 @@ class WebGLContext {
     }
 }
 
-const webGLContext = new WebGLContext();
+const renderContext = new RenderContext();
 
-export { webGLContext }
+export { renderContext }
