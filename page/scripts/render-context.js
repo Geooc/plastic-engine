@@ -9,7 +9,10 @@ if (!gl) alert('Your browser or machine may not support webgl.');
 
 const hasFilterAnisotropic = useExtension("EXT_texture_filter_anisotropic");
 
-if (!isWebGL2) if (!useExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
+//if (!isWebGL2) if (!useExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
+if (!isWebGL2) if (!useExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
+
+let ext = gl.getExtension('OES_vertex_array_object');
 
 // utils
 function useExtension(name) {
@@ -185,7 +188,7 @@ class RenderContext {
                         _uniforms: {}
                     };
 
-                    let header = 'precision mediump float;\n';
+                    let header = 'precision highp float;\n';
                     let vsAttribs = '';
                     let attribIndex = 0;
                     for (const attribName in drawcall._attribsInfo) {
@@ -289,7 +292,7 @@ class RenderContext {
                     }
                 }
                 // submit drawcall
-                isWebGL2 ? gl.bindVertexArray(drawcall._vao) : gl.bindVertexArrayOES(drawcall._vao);
+                isWebGL2 ? gl.bindVertexArray(drawcall._vao) : ext.bindVertexArrayOES(drawcall._vao);
 
                 if (drawcall._indicesType) {
                     gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, drawcall._indicesOffset);
@@ -298,7 +301,7 @@ class RenderContext {
                     gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
                 }
 
-                isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
+                isWebGL2 ? gl.bindVertexArray(null) : ext.bindVertexArrayOES(null);
             }
         }
 
@@ -334,7 +337,7 @@ class RenderContext {
     // drawcall
     createDrawcall(primitiveType, vertexCount, attribsInfo) {
         let ret = {
-            _vao: isWebGL2 ? gl.createVertexArray() : gl.createVertexArrayOES(),
+            _vao: isWebGL2 ? gl.createVertexArray() : ext.createVertexArrayOES(),
             _attribsInfo: attribsInfo,
             _vertexCount: vertexCount,
             _type: primitiveType,
@@ -342,7 +345,7 @@ class RenderContext {
             _indicesOffset: 0,
             _shaderKey: ''
         }
-        isWebGL2 ? gl.bindVertexArray(ret._vao) : gl.bindVertexArrayOES(ret._vao);
+        isWebGL2 ? gl.bindVertexArray(ret._vao) : ext.bindVertexArrayOES(ret._vao);
 
         let attribIndex = 0;
         for (const attribName in attribsInfo) {
@@ -361,12 +364,12 @@ class RenderContext {
             }
         }
 
-        isWebGL2 ? gl.bindVertexArray(null) : gl.bindVertexArrayOES(null);
+        isWebGL2 ? gl.bindVertexArray(null) : ext.bindVertexArrayOES(null);
         return ret;
     }
 
     destoryDrawcall(drawcall) {
-        isWebGL2 ? gl.deleteVertexArrayOES(drawcall._vao) : gl.deleteVertexArrayOES(drawcall._vao);
+        isWebGL2 ? gl.deleteVertexArray(drawcall._vao) : ext.deleteVertexArrayOES(drawcall._vao);
     }
 }
 
