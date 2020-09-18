@@ -320,6 +320,14 @@ class RenderContext {
         return buffer;
     }
 
+    createVertexBuffer(data) {
+        return this.createBuffer(this.bufferType.VERTEX, data);
+    }
+
+    createIndexBuffer(data) {
+        return this.createBuffer(this.bufferType.INDEX, data);
+    }
+
     useVertexBuffer(buffer, index, size, type, byteStride, byteOffset) {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.vertexAttribPointer(index, size, type, false, byteStride, byteOffset);

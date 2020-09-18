@@ -1,5 +1,5 @@
 import { renderContext as rc } from './render-context.js'
-import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix } from './math-utils.js'
+import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix, calcTransform, mulMatrices, identityMat } from './math-utils.js'
 import { loadVertexShaderAndFragmentShader, loadImage, loadGLTF } from './asset-utils.js'
 
 const convertAttributeName = {
@@ -21,7 +21,7 @@ const convertAttributeSize = {
 };
 
 // gltf utils
-function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
+function createGeometryFromGLTF(gltf, gltfArrayBuffers) {
     if (!gltf.meshes) {
         alert('no meshes in gltf!');
         return null;
@@ -32,9 +32,6 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
     for (let i = 0; i < gltf.bufferViews.length; ++i) {
         const bufferView = gltf.bufferViews[i];
         typedArrays[i] = new Int8Array(gltfArrayBuffers[bufferView.buffer], bufferView.byteOffset ? bufferView.byteOffset : 0, bufferView.byteLength);
-        // if (bufferView.target) {
-        //     buffers[i] = rc.createBuffer(bufferView.target, typedArrays[i]);
-        // }
     }
     let boundingMin = [null, null, null];
     let boundingMax = [null, null, null];
@@ -63,7 +60,7 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
                 }
                 // lazy create buffer
                 if (!buffers[accessor.bufferView]) {
-                    buffers[accessor.bufferView] = rc.createBuffer(rc.bufferType.VERTEX, typedArrays[accessor.bufferView]);
+                    buffers[accessor.bufferView] = rc.createVertexBuffer(typedArrays[accessor.bufferView]);
                 }
                 // set attribute info
                 attribsInfo[convertAttributeName[attribName]] = {
@@ -78,7 +75,7 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
             if (primitive.indices) {
                 const accessor = gltf.accessors[primitive.indices];
                 if (!buffers[accessor.bufferView]) {
-                    buffers[accessor.bufferView] = rc.createBuffer(rc.bufferType.INDEX, typedArrays[accessor.bufferView]);
+                    buffers[accessor.bufferView] = rc.createIndexBuffer(typedArrays[accessor.bufferView]);
                 }
                 attribsInfo['indices'] = {
                     buffer: buffers[accessor.bufferView],
@@ -103,13 +100,13 @@ function createMeshesFromGLTF(gltf, gltfArrayBuffers) {
     };
 }
 
-function destoryMeshes(meshes) {
-    for (const mesh in meshes.meshes) {
+function destoryGeometry(geometry) {
+    for (const mesh in geometry.meshes) {
         for (const primitive in mesh) {
             rc.destoryDrawcall(primitive.drawcall);
         }
     }
-    for (const buffer in meshes.buffers) {
+    for (const buffer in geometry.buffers) {
         rc.destoryBuffer(buffer);
     }
 }
@@ -122,14 +119,41 @@ function createMaterialsFromGLTF(gltf, gltfPath) {
     // todo
 }
 
-function createSceneGraph(gltf) {
-    let root = {
-        name: gltf.scenes[gltf.scene].name,
-        children: gltf.scenes[gltf.scene].nodes
-    };
-    for (let i = 0; i < gltf.nodes.length; ++i) {
-        //
-    }
+function drawGLTF(gltf, geometry, viewInfo, renderPass) {
+    if (!gltf || !geometry || !viewInfo || !renderPass) return;
+    rc.clearColorAndDepth();
+
+    let opaqueList = new Array();
+    //let maskedList = new Array();
+    //let translucentList = new Array();
+    (function drawNodes(nodeIds, parentTransform) {
+        if (!nodeIds) return;
+        for (const nodeId of nodeIds) {
+            const node = gltf.nodes[nodeId];
+            let transform = node.matrix ? node.matrix : calcTransform(node.translation, node.rotation, node.scale);
+            transform = mulMatrices(parentTransform, transform);
+            if (node.mesh != undefined) {
+                for (const primitive of geometry.meshes[node.mesh].primitives) {
+                    opaqueList.push({
+                        parameters: {
+                            uModel: transform,
+                            uView: viewInfo.viewMat,
+                            uProj: viewInfo.projMat,
+                            uTestTex: viewInfo.testTexture
+                        },
+                        drawcall: primitive.drawcall
+                    });
+                }
+            }
+            drawNodes(node.children, transform);
+        }
+    })(gltf.scenes[gltf.scene].nodes, identityMat());
+
+    rc.execRenderPass(renderPass, function* () {
+        yield* opaqueList;
+        //yield* maskedList;
+        //yield* translucentList;
+    });
 }
 
 class App {
@@ -240,28 +264,6 @@ class App {
         }
     }
 
-    drawScene() {
-        rc.clearColorAndDepth();
-
-        const testParams = {
-            uView: this.viewMat,
-            uProj: this.projMat,
-            uTestTex: this.testTexture
-        };
-
-        const meshes = this.meshes ? this.meshes.meshes : null;
-        rc.execRenderPass(this.testPass, function* () {
-            for (const meshId in meshes) {
-                for (const primitiveId in meshes[meshId].primitives) {
-                    yield {
-                        parameters: testParams,
-                        drawcall: meshes[meshId].primitives[primitiveId].drawcall
-                    };
-                }
-            }
-        });
-    }
-
     init() {
         this.addCameraController(rc.getCanvas());
         // renderpass
@@ -271,21 +273,24 @@ class App {
         // texture
         loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
         // gltf
-        loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
-            this.meshes = createMeshesFromGLTF(gltf, gltfArrayBuffers);
-            this.at = [
-                (this.meshes.boundingMax[0] + this.meshes.boundingMin[0]) / 2,
-                (this.meshes.boundingMax[1] + this.meshes.boundingMin[1]) / 2,
-                (this.meshes.boundingMax[2] + this.meshes.boundingMin[2]) / 2,
-            ];
-            this.targetRadius = Math.max(
-                this.meshes.boundingMax[0] - this.meshes.boundingMin[0],
-                Math.max(
-                    this.meshes.boundingMax[1] - this.meshes.boundingMin[1],
-                    this.meshes.boundingMax[2] - this.meshes.boundingMin[2],
-                )
-            ) / 2;
-            this.cameraScaleSpeed = this.targetRadius / 100;
+        loadGLTF('@tokyo/scene.gltf', (gltf, gltfArrayBuffers) => {
+            this.gltf = gltf;
+            this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
+            if (this.geometry.boundingMax) {
+                this.at = [
+                    (this.geometry.boundingMax[0] + this.geometry.boundingMin[0]) / 2,
+                    (this.geometry.boundingMax[1] + this.geometry.boundingMin[1]) / 2,
+                    (this.geometry.boundingMax[2] + this.geometry.boundingMin[2]) / 2,
+                ];
+                this.targetRadius = Math.max(
+                    this.geometry.boundingMax[0] - this.geometry.boundingMin[0],
+                    Math.max(
+                        this.geometry.boundingMax[1] - this.geometry.boundingMin[1],
+                        this.geometry.boundingMax[2] - this.geometry.boundingMin[2],
+                    )
+                ) / 2;
+                this.cameraScaleSpeed = this.targetRadius / 100;
+            }
             // todo
         });
     }
@@ -295,7 +300,12 @@ class App {
         this.updateView();
         this.checkSize(rc.getCanvas());
 
-        this.drawScene();
+        let viewInfo = {
+            viewMat : this.viewMat,
+            projMat : this.projMat,
+            testTexture : this.testTexture
+        };
+        drawGLTF(this.gltf, this.geometry, viewInfo, this.testPass);
     }
 
     // quit() {

@@ -27,4 +27,16 @@ function calcOrbitViewMatrix(pitch, yaw, radius, at) {
     return calcLookAtViewMatrix(eye, at, [0, 1, 0]);
 }
 
-export { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix }
+function calcTransform(translate, rotation, scale) {
+    return glMatrix.mat4.fromRotationTranslationScale(glMatrix.mat4.create(), rotation ? rotation : [0, 0, 0, 1], translate ? translate : [0, 0, 0], scale ? scale : [1, 1, 1]);
+}
+
+function mulMatrices(m0, m1) {
+    return glMatrix.mat4.multiply(glMatrix.mat4.create(), m0, m1);
+}
+
+function identityMat() {
+    return glMatrix.mat4.create();
+}
+
+export { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix, calcTransform, mulMatrices, identityMat }
