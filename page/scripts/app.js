@@ -273,7 +273,7 @@ class App {
         // texture
         loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
         // gltf
-        loadGLTF('@tokyo/scene.gltf', (gltf, gltfArrayBuffers) => {
+        loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
             this.gltf = gltf;
             this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
             if (this.geometry.boundingMax) {
