@@ -74,7 +74,15 @@ class RenderContext {
         this.bufferType = {
             VERTEX      : gl.ARRAY_BUFFER,
             INDEX       : gl.ELEMENT_ARRAY_BUFFER
-        }
+        };
+
+        this.textureFormat = {
+            RGBA8 : gl.RGBA,
+            //RG16F :,
+            //RGBA16F :,
+            //R11G11B10F:,
+            //R10G10B10A2:,
+        };
 
         this.primitiveType = {
             POINTS          : gl.POINTS,
@@ -85,6 +93,10 @@ class RenderContext {
             TRIANGLE_FAN    : gl.TRIANGLE_FAN,
             TRIANGLES       : gl.TRIANGLES
         };
+
+        // todo
+        // this.cubeFace = {
+        // };
     }
 
     getCanvas() {
@@ -108,7 +120,15 @@ class RenderContext {
     }
 
     // texture
-    createTextureRGBA8(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
+    createTexture2D(format, width, height, filter, warp, needMipmaps) {
+        // todo
+    }
+
+    createTextureCube(format, width, height, filter, warp, needMipmaps) {
+        // todo
+    }
+
+    createTexture2DFromImage(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
         if (!isWebGL2 && !(isPowerOf2(image.width) && isPowerOf2(image.height))) {
             filter = this.filterType.BILINEAR;
             warp = this.warpType.CLAMP;
@@ -161,18 +181,39 @@ class RenderContext {
             name: name,
             _vsSrc: vsSrc,
             _fsSrc: fsSrc,
+            _outputsInfo: outputsInfo,
             _shaderMap: {}
         };
+        if (outputsInfo) {
+            ret.fbo = gl.createFramebuffer();
+            // todo: maybe bind this later?
+            gl.bindFramebuffer(gl.FRAMEBUFFER, ret.fbo);
+            let attachPoint = 0;
+            for (const outputName in outputsInfo) {
+                if (outputName == 'depth') {
+                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, outputsInfo[outputName].texture, gl.TEXTURE_2D, outputsInfo[outputName].level);
+                }
+                else {
+                    gl.framebufferTexture2D(
+                        gl.FRAMEBUFFER,
+                        gl.COLOR_ATTACHEMENT0 + attachPoint++,
+                        outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
+                        outputsInfo[outputName].texture,
+                        outputsInfo[outputName].level
+                    );
+                }
+            }
+        }
+
         return ret;
     }
 
-    execRenderPass(renderPass, cmdGenerator) {
+    execRenderPass(renderPass, cmdList) {
         if (!renderPass) return;
         const err = gl.getError();
         if (err != gl.NO_ERROR) {
             console.log(`Error ${err} caught before RenderPass <${renderPass.name}>`);
         }
-        let cmdList = cmdGenerator();
         for (const cmd of cmdList) {
             const drawcall = cmd.drawcall;
             const parameters = cmd.parameters;

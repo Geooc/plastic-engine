@@ -1,6 +1,6 @@
 import { renderContext as rc } from './render-context.js'
-import { calcPerspectiveProjMatrix, calcLookAtViewMatrix, calcOrbitViewMatrix, calcTransform, mulMatrices, identityMat } from './math-utils.js'
-import { loadVertexShaderAndFragmentShader, loadImage, loadGLTF } from './asset-utils.js'
+import { mathUtils } from './math-utils.js'
+import { assetUtils } from './asset-utils.js'
 
 const convertAttributeName = {
     POSITION    : 'aLocalPosition',
@@ -33,11 +33,10 @@ function createGeometryFromGLTF(gltf, gltfArrayBuffers) {
         const bufferView = gltf.bufferViews[i];
         typedArrays[i] = new Int8Array(gltfArrayBuffers[bufferView.buffer], bufferView.byteOffset ? bufferView.byteOffset : 0, bufferView.byteLength);
     }
-    let boundingMin = [null, null, null];
-    let boundingMax = [null, null, null];
+    let bounds = { min : new Array(3), max : new Array(3) };
     let meshes = new Array(gltf.meshes.length);
     for (let i = 0; i < gltf.meshes.length; ++i) {
-        let mesh = {
+        meshes[i] = {
             name: gltf.meshes[i].name,
             primitives: new Array(gltf.meshes[i].primitives.length),
         };
@@ -54,8 +53,8 @@ function createGeometryFromGLTF(gltf, gltfArrayBuffers) {
                 // bounding box
                 if (attribName == 'POSITION') {
                     for (let i = 0; i < 3; i++) {
-                        boundingMin[i] = boundingMin[i] ? Math.min(boundingMin[i], accessor.min[i]) : accessor.min[i];
-                        boundingMax[i] = boundingMax[i] ? Math.max(boundingMax[i], accessor.max[i]) : accessor.max[i];
+                        bounds.min[i] = bounds.min[i] ? Math.min(bounds.min[i], accessor.min[i]) : accessor.min[i];
+                        bounds.max[i] = bounds.max[i] ? Math.max(bounds.max[i], accessor.max[i]) : accessor.max[i];
                     }
                 }
                 // lazy create buffer
@@ -84,18 +83,16 @@ function createGeometryFromGLTF(gltf, gltfArrayBuffers) {
                 };
                 vertexCount = accessor.count;
             }
-            mesh.primitives[j] = {
+            meshes[i].primitives[j] = {
                 materialId: gltf.meshes[i].primitives[j].material,
                 drawcall: rc.createDrawcall(gltf.meshes[i].primitives[j].mode ? gltf.meshes[i].primitives[j].mode : rc.primitiveType.TRIANGLES, vertexCount, attribsInfo),
             };
         }
-        meshes[i] = mesh;
     }
 
     return {
         meshes: meshes,
-        boundingMin: boundingMin,
-        boundingMax: boundingMax,
+        bounds: bounds,
         buffers: buffers
     };
 }
@@ -112,6 +109,7 @@ function destoryGeometry(geometry) {
 }
 
 function createAnimationsFromGLTF(gltf, gltfArrayBuffers) {
+    if (!gltf || !gltf.skins || !gltf.animations) return;
     // todo
 }
 
@@ -123,18 +121,18 @@ function drawGLTF(gltf, geometry, viewInfo, renderPass) {
     if (!gltf || !geometry || !viewInfo || !renderPass) return;
     rc.clearColorAndDepth();
 
-    let opaqueList = new Array();
-    //let maskedList = new Array();
-    //let translucentList = new Array();
+    let opaqueCmdList = new Array();
+    //let maskedCmdList = new Array();
+    //let translucentCmdList = new Array();
     (function drawNodes(nodeIds, parentTransform) {
         if (!nodeIds) return;
         for (const nodeId of nodeIds) {
             const node = gltf.nodes[nodeId];
-            let transform = node.matrix ? node.matrix : calcTransform(node.translation, node.rotation, node.scale);
-            transform = mulMatrices(parentTransform, transform);
+            let transform = node.matrix ? node.matrix : mathUtils.calcTransform(node.translation, node.rotation, node.scale);
+            transform = mathUtils.mulMatrices(parentTransform, transform);
             if (node.mesh != undefined) {
                 for (const primitive of geometry.meshes[node.mesh].primitives) {
-                    opaqueList.push({
+                    opaqueCmdList.push({
                         parameters: {
                             uModel: transform,
                             uView: viewInfo.viewMat,
@@ -147,13 +145,9 @@ function drawGLTF(gltf, geometry, viewInfo, renderPass) {
             }
             drawNodes(node.children, transform);
         }
-    })(gltf.scenes[gltf.scene].nodes, identityMat());
+    })(gltf.scenes[gltf.scene].nodes, mathUtils.identityMatrix());
 
-    rc.execRenderPass(renderPass, function* () {
-        yield* opaqueList;
-        //yield* maskedList;
-        //yield* translucentList;
-    });
+    rc.execRenderPass(renderPass, opaqueCmdList);
 }
 
 class App {
@@ -175,8 +169,8 @@ class App {
         this.targetYaw = this.yaw;
         this.targetRadius = this.radius;
 
-        this.projMat = calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
-        this.viewMat = calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
+        this.viewMat = mathUtils.calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
     }
 
     _recordStart(x, y) {
@@ -186,11 +180,15 @@ class App {
         this.recordYaw = this.yaw;
     }
 
-    _handleMove(x, y) {
+    _handleRot(x, y) {
         let deltaX = (x - this.startX) * this.cameraRotSpeed;
         let deltaY = (y - this.startY) * this.cameraRotSpeed;
         this.targetPitch = this.recordPitch + deltaX;
         this.targetYaw = Math.max(Math.min(this.recordYaw + deltaY, 75), -75);
+    }
+
+    _handleMove(x, y) {
+        // todo
     }
 
     _handleScale(scale) {
@@ -203,7 +201,7 @@ class App {
             this._recordStart(e.clientX, e.clientY);
             canvas.onmousemove = (e) => {
                 e.preventDefault();
-                this._handleMove(e.clientX, e.clientY);
+                this._handleRot(e.clientX, e.clientY);
             }
             canvas.onmouseup = (e) => {
                 canvas.onmousemove = null;
@@ -222,7 +220,7 @@ class App {
             canvas.addEventListener('touchmove', (e) => {
                 if (e.targetTouches.length == 1) {
                     e.preventDefault();
-                    this._handleMove(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+                    this._handleRot(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
                 }
                 else if (e.targetTouches.length == 2) {
                     // todo
@@ -246,11 +244,11 @@ class App {
         this.pitch += (this.targetPitch - this.pitch) * amount;
         this.yaw += (this.targetYaw - this.yaw) * amount;
         this.radius += (this.targetRadius - this.radius) * amount;
-        this.viewMat = calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
+        this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
     }
 
     _resize(width, height) {
-        this.projMat = calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
         rc.setViewport(0, 0, width, height);
     }
 
@@ -267,31 +265,32 @@ class App {
     init() {
         this.addCameraController(rc.getCanvas());
         // renderpass
-        loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
+        assetUtils.loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
             this.testPass = rc.createRenderPass('test', vsSrc, fsSrc);
         });
         // texture
-        loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
+        assetUtils.loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureRGBA8(img, rc.filterType.ANISOTROPIC); });
         // gltf
-        loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
+        assetUtils.loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
             this.gltf = gltf;
             this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
-            if (this.geometry.boundingMax) {
+            this.animations = createAnimationsFromGLTF(gltf, gltfArrayBuffers);
+            // todo: better camera pos
+            if (this.geometry.bounds) {
                 this.at = [
-                    (this.geometry.boundingMax[0] + this.geometry.boundingMin[0]) / 2,
-                    (this.geometry.boundingMax[1] + this.geometry.boundingMin[1]) / 2,
-                    (this.geometry.boundingMax[2] + this.geometry.boundingMin[2]) / 2,
+                    (this.geometry.bounds.max[0] + this.geometry.bounds.min[0]) / 2,
+                    (this.geometry.bounds.max[1] + this.geometry.bounds.min[1]) / 2,
+                    (this.geometry.bounds.max[2] + this.geometry.bounds.min[2]) / 2,
                 ];
                 this.targetRadius = Math.max(
-                    this.geometry.boundingMax[0] - this.geometry.boundingMin[0],
+                    this.geometry.bounds.max[0] - this.geometry.bounds.min[0],
                     Math.max(
-                        this.geometry.boundingMax[1] - this.geometry.boundingMin[1],
-                        this.geometry.boundingMax[2] - this.geometry.boundingMin[2],
+                        this.geometry.bounds.max[1] - this.geometry.bounds.min[1],
+                        this.geometry.bounds.max[2] - this.geometry.bounds.min[2],
                     )
-                ) / 2;
+                );
                 this.cameraScaleSpeed = this.targetRadius / 100;
             }
-            // todo
         });
     }
 
@@ -307,14 +306,6 @@ class App {
         };
         drawGLTF(this.gltf, this.geometry, viewInfo, this.testPass);
     }
-
-    // quit() {
-    //     rc.destoryBuffer(this.testVbo);
-    //     rc.destoryBuffer(this.testEbo);
-    //     rc.destoryTexture(this.testTexture);
-    //     rc.destoryDrawcall(this.drawcall);
-    //     rc.destoryShaderProgram(this.testShader);
-    // }
 }
 
 let app = new App();
