@@ -13,8 +13,8 @@ rc.renderBack(true);
 
 const drawcall = rc.createDrawcall(rc.TRIANGLES, vertexCount, {
     position	: { buffer : vbo, type : rc.FLOAT, byteStride : 20, byteOffset : 0 },
-    uv			: { buffer : vbo, type : rc.FLOAT, byteStride : 20, byteOffset : 12 },
-    indices		: { buffer : ebo, type : rc.USHORT }
+    uv		: { buffer : vbo, type : rc.FLOAT, byteStride : 20, byteOffset : 12 },
+    indices	: { buffer : ebo, type : rc.USHORT }
 });
 const renderPass = rc.createRenderPass('test render pass', vsSrc, fsSrc);
 const texture = rc.createTextureRGBA8(img, filter, warp);
