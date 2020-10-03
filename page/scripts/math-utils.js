@@ -1,5 +1,6 @@
 const mat4 = glMatrix.mat4;
 const vec3 = glMatrix.vec3;
+const quat = glMatrix.quat;
 
 let mathUtils = {
     degreeToRadian : function(degree) {
@@ -29,16 +30,24 @@ let mathUtils = {
     },
     
     calcTransform : function(translate, rotation, scale) {
-        return glMatrix.mat4.fromRotationTranslationScale(glMatrix.mat4.create(), rotation ? rotation : [0, 0, 0, 1], translate ? translate : [0, 0, 0], scale ? scale : [1, 1, 1]);
+        return mat4.fromRotationTranslationScale(mat4.create(), rotation ? rotation : [0, 0, 0, 1], translate ? translate : [0, 0, 0], scale ? scale : [1, 1, 1]);
     },
     
     mulMatrices : function(m0, m1) {
-        return glMatrix.mat4.multiply(glMatrix.mat4.create(), m0, m1);
+        return mat4.multiply(mat4.create(), m0, m1);
     },
     
     identityMatrix : function() {
-        return glMatrix.mat4.create();
+        return mat4.create();
     },
+
+    lerpVector : function(vector0, vector1, k) {
+        return vec3.lerp(vec3.create(), vector0, vector1, k);
+    },
+
+    slerpQuat : function(quat0, quat1, k) {
+        return quat.slerp(quat.create(), quat0, quat1, k);
+    }
 };
 
 export { mathUtils }

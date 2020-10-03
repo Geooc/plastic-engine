@@ -17,7 +17,7 @@ const drawcall = rc.createDrawcall(rc.TRIANGLES, vertexCount, {
     indices	: { buffer : ebo, type : rc.USHORT }
 });
 const renderPass = rc.createRenderPass('test render pass', vsSrc, fsSrc);
-const texture = rc.createTextureRGBA8(img, filter, warp);
+const texture = rc.createTextureFromImage(img, filter, warp);
 
 rc.setRenderTarget({
     color0 : { texture : tex },
@@ -43,7 +43,7 @@ rc.execPostProcess(testPostProcess, [0, 0, 800, 600], {
   - [ ] PostProcess
 - [ ] GLTF
   - [x] Mesh
-  - [ ] VTF Animation
+  - [x] VTF Animation
   - [ ] Material
 - [ ] PostProcess
   - [ ] Bloom

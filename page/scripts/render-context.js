@@ -7,21 +7,53 @@ if (!gl) {
 }
 if (!gl) alert('Your browser or machine may not support webgl.');
 
-const hasFilterAnisotropic = useExtension("EXT_texture_filter_anisotropic");
+// const alignment = 1;
+// gl.pixelStorei(gl.UNPACK_ALIGNMENT, alignment);
 
-//if (!isWebGL2) if (!useExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
-if (!isWebGL2) if (!useExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
-
-let ext = gl.getExtension('OES_vertex_array_object');
+const hasFilterAnisotropic = getAndApplyExtension("EXT_texture_filter_anisotropic");
+if (!isWebGL2) {
+    if (!getAndApplyExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
+    if (!getAndApplyExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
+    if (!getAndApplyExtension("OES_texture_half_float")) alert('not support OES_texture_half_float!');
+    if (!getAndApplyExtension("OES_texture_half_float_linear")) alert('not support OES_texture_half_float_linear!');
+}
 
 // utils
-function useExtension(name) {
+// Making WebGL1 extensions look like WebGL2. from https://webgl2fundamentals.org/webgl/lessons/webgl1-to-webgl2.html
+function getAndApplyExtension(name) {
     const ext = gl.getExtension(name);
-    if (!ext) return false;
-    for (const prop in ext) {
-        gl[prop] = typeof (ext[prop]) === 'function' ? () => { return ext[prop] } : ext[prop];
+    if (!ext) {
+        return null;
     }
-    return true;
+    const fnSuffix = name.split("_")[0];
+    const enumSuffix = '_' + fnSuffix;
+    for (const key in ext) {
+        const value = ext[key];
+        const isFunc = typeof (value) === 'function';
+        const suffix = isFunc ? fnSuffix : enumSuffix;
+        let name = key;
+        // examples of where this is not true are WEBGL_compressed_texture_s3tc
+        // and WEBGL_compressed_texture_pvrtc
+        if (key.endsWith(suffix)) {
+            name = key.substring(0, key.length - suffix.length);
+        }
+        if (gl[name] !== undefined) {
+            if (!isFunc && gl[name] !== value) {
+                console.warn("conflict:", name, gl[name], value, key);
+            }
+        } else {
+            if (isFunc) {
+                gl[name] = function (origFn) {
+                    return function () {
+                        return origFn.apply(ext, arguments);
+                    };
+                }(value);
+            } else {
+                gl[name] = value;
+            }
+        }
+    }
+    return ext;
 }
 
 function compileShader(type, src) {
@@ -41,15 +73,59 @@ function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 }
 
+// from: https://stackoverflow.com/questions/32633585/how-do-you-convert-to-half-floats-in-javascript
+var toHalf = (function () {
+
+    var floatView = new Float32Array(1);
+    var int32View = new Int32Array(floatView.buffer);
+
+    /* This method is faster than the OpenEXR implementation (very often
+     * used, eg. in Ogre), with the additional benefit of rounding, inspired
+     * by James Tursa?s half-precision code. */
+    return function toHalf(val) {
+
+        floatView[0] = val;
+        var x = int32View[0];
+
+        var bits = (x >> 16) & 0x8000; /* Get the sign */
+        var m = (x >> 12) & 0x07ff; /* Keep one extra bit for rounding */
+        var e = (x >> 23) & 0xff; /* Using int is faster here */
+
+        /* If zero, or denormal, or exponent underflows too much for a denormal
+         * half, return signed zero. */
+        if (e < 103) {
+            return bits;
+        }
+
+        /* If NaN, return NaN. If Inf or exponent overflow, return Inf. */
+        if (e > 142) {
+            bits |= 0x7c00;
+            /* If exponent was 0xff and one mantissa bit was set, it means NaN,
+                 * not Inf, so make sure we set one mantissa bit too. */
+            bits |= ((e == 255) ? 0 : 1) && (x & 0x007fffff);
+            return bits;
+        }
+
+        /* If exponent underflows but not too much, return a denormal */
+        if (e < 113) {
+            m |= 0x0800;
+            /* Extra rounding may overflow and set mantissa to 0 and exponent
+             * to 1, which is OK. */
+            bits |= (m >> (114 - e)) + ((m >> (113 - e)) & 1);
+            return bits;
+        }
+
+        bits |= ((e - 112) << 10) | (m >> 1);
+        /* Extra rounding. An overflow will set mantissa to 0 and increment
+         * the exponent, which is OK. */
+        bits += m & 1;
+        return bits;
+    };
+
+}());
+
 class RenderContext {
     constructor() {
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clearDepth(1.0);
-        gl.enable(gl.CULL_FACE);
-        gl.enable(gl.DEPTH_TEST);
-        gl.depthFunc(gl.LEQUAL);
-        gl.blendFunc(gl.SRC_SLPHA, gl.ONE_MINUS_SRC_ALPHA);
-
         this.filterType = {
             POINT       : 0,
             BILINEAR    : 1,
@@ -77,11 +153,15 @@ class RenderContext {
         };
 
         this.textureFormat = {
-            RGBA8 : gl.RGBA,
-            //RG16F :,
-            //RGBA16F :,
-            //R11G11B10F:,
-            //R10G10B10A2:,
+            RGB8        : 0,
+            RGBA8       : 1,
+            R8          : 2,
+
+            RGB16F      : 3,
+            RGBA16F     : 4,
+            R16F        : 5,
+
+            R11G11B10   : 6// fallback on webgl
         };
 
         this.primitiveType = {
@@ -94,9 +174,29 @@ class RenderContext {
             TRIANGLES       : gl.TRIANGLES
         };
 
-        // todo
-        // this.cubeFace = {
-        // };
+        this.format2DataFormat = [
+            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED :gl.LUMINANCE,
+            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED :gl.LUMINANCE,
+            gl.RGB
+        ];
+
+        this.format2SizedFormat = [
+            gl.RGB8, gl.RGBA8, gl.R8,
+            gl.RGB16F, gl.RGBA16F, gl.R16F,
+            gl.R11F_G11F_B10F
+        ];
+
+        this.depthFunc = {
+            NONE    : 0,
+            LEQUAL  : gl.LEQUAL,
+        };
+
+        this.renderFace();
+        this.setDepthFunc(this.depthFunc.LEQUAL);
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clearDepth(1.0);
+        //gl.blendFunc(gl.SRC_SLPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
 
     getCanvas() {
@@ -115,27 +215,42 @@ class RenderContext {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     }
 
+    setDepthFunc(func) {
+        if (func) {
+            gl.enable(gl.DEPTH_TEST);
+            gl.depthFunc(func);
+        }
+        else {
+            gl.disable(gl.DEPTH_TEST);
+        }
+    }
+
+    writeDepth(enable) {
+        gl.depthMask(enable);
+    }
+
+    renderFace(front = true, back = false) {
+        if (front && back) gl.disable(gl.CULL_FACE)
+        else {
+            gl.enable(gl.CULL_FACE);
+            gl.cullFace(front ? gl.BACK : (back ? gl.FRONT : gl.FRONT_AND_BACK));
+        }
+    }
+
     setViewport(x, y, width, height) {
         gl.viewport(x, y, width, height);
     }
 
     // texture
-    createTexture2D(format, width, height, filter, warp, needMipmaps) {
+    createCubeMap(format, width, height, filter, warp, needMipmaps) {
         // todo
     }
 
-    createTextureCube(format, width, height, filter, warp, needMipmaps) {
-        // todo
-    }
-
-    createTexture2DFromImage(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
-        if (!isWebGL2 && !(isPowerOf2(image.width) && isPowerOf2(image.height))) {
-            filter = this.filterType.BILINEAR;
+    setTextureSampler(filter, warp, isPowerOf2, isCubemap = false) {
+        if (!isWebGL2 && !isPowerOf2) {
+            if (filter != this.filterType.POINT) filter = this.filterType.BILINEAR;
             warp = this.warpType.CLAMP;
         }
-        const tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
         // filter
         let min = gl.NEAREST;
         let mag = gl.NEAREST;
@@ -144,8 +259,8 @@ class RenderContext {
                 break;
             case this.filterType.ANISOTROPIC:
                 if (hasFilterAnisotropic) {
-                    let maxAnisotropy = gl.getParameter(gl.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
-                    gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+                    let maxAnisotropy = gl.getParameter(gl.MAX_TEXTURE_MAX_ANISOTROPY);
+                    gl.texParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAX_ANISOTROPY, maxAnisotropy);
                 }
             case this.filterType.TRILINEAR:
                 gl.generateMipmap(gl.TEXTURE_2D);
@@ -163,6 +278,36 @@ class RenderContext {
         // warp
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, warp);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, warp);
+    }
+
+    createTextureFromImage(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP, sRGB = false) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        this.setTextureSampler(filter, warp, isPowerOf2(image.width) && isPowerOf2(image.height));
+        return tex;
+    }
+
+    createTextureFromData(data, format, width, height, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        let dataFormat = this.format2DataFormat[format];
+        let dataType = format > 2 ? gl.FLOAT : gl.UNSIGNED_BYTE;
+        if (isWebGL2) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, this.format2SizedFormat[format], width, height, 0, dataFormat, dataType, data);
+        }
+        else {
+            if (dataType == gl.FLOAT) {// no sized format on webgl, we convert float array to half array. is there a better way?
+                let halfData = new Uint16Array(data.length);
+                for (let i = 0; i < halfData.length; ++i) {
+                    halfData[i] = toHalf(data[i]);
+                }
+                dataType = gl.HALF_FLOAT;
+                data = halfData;
+            }
+            gl.texImage2D(gl.TEXTURE_2D, 0, dataFormat, width, height, 0, dataFormat, dataType, data);
+        }
+        this.setTextureSampler(filter, warp, isPowerOf2(width) && isPowerOf2(height));
         return tex;
     }
 
@@ -182,7 +327,8 @@ class RenderContext {
             _vsSrc: vsSrc,
             _fsSrc: fsSrc,
             _outputsInfo: outputsInfo,
-            _shaderMap: {}
+            _shaderMap: {},
+            _params: {}
         };
         if (outputsInfo) {
             ret.fbo = gl.createFramebuffer();
@@ -208,6 +354,72 @@ class RenderContext {
         return ret;
     }
 
+    setShaderParameters(shader, parameters) {
+        let textureSlot = 0;// fixme: the way set texture has problem
+        for (const name in parameters) {
+            if (shader._uniforms[name]) {
+                const loc = shader._uniforms[name].loc;
+                const size = shader._uniforms[name].size;
+                const type = shader._uniforms[name].type;
+                const value = parameters[name];
+                switch (type) {
+                    case gl.FLOAT:
+                        if (size > 1) { gl.uniform1fv(loc, value); break; }
+                        gl.uniform1f(loc, value);
+                        break;
+                    case gl.FLOAT_VEC2:
+                        if (size > 1) { gl.uniform2fv(loc, value); break; }
+                        gl.uniform2f(loc, value[0], value[1]);
+                        break;
+                    case gl.FLOAT_VEC3:
+                        if (size > 1) { gl.uniform3fv(loc, value); break; }
+                        gl.uniform3f(loc, value[0], value[1], value[2]);
+                        break;
+                    case gl.FLOAT_VEC4:
+                        if (size > 1) { gl.uniform4fv(loc, value); break; }
+                        gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
+                        break;
+                    case gl.INT:
+                    case gl.BOOL:
+                        if (size > 1) { gl.uniform1iv(loc, value); break; }
+                        gl.uniform1i(loc, value);
+                        break;
+                    case gl.INT_VEC2:
+                    case gl.BOOL_VEC2:
+                        if (size > 1) { gl.uniform2iv(loc, value); break; }
+                        gl.uniform2i(loc, value[0], value[1]);
+                        break;
+                    case gl.INT_VEC3:
+                    case gl.BOOL_VEC3:
+                        if (size > 1) { gl.uniform3iv(loc, value); break; }
+                        gl.uniform3i(loc, value[0], value[1], value[2]);
+                        break;
+                    case gl.INT_VEC4:
+                    case gl.BOOL_VEC4:
+                        if (size > 1) { gl.uniform4iv(loc, value); break; }
+                        gl.uniform4i(loc, value[0], value[1], value[2], value[3]);
+                        break;
+                    case gl.FLOAT_MAT2:
+                        gl.uniformMatrix2fv(loc, false, value);
+                        break;
+                    case gl.FLOAT_MAT3:
+                        gl.uniformMatrix3fv(loc, false, value);
+                        break;
+                    case gl.FLOAT_MAT4:
+                        gl.uniformMatrix4fv(loc, false, value);
+                        break;
+                    case gl.SAMPLER_2D:
+                    case gl.SAMPLER_CUBE:
+                        this.useTexture(value, textureSlot);
+                        gl.uniform1i(loc, textureSlot++);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
     execRenderPass(renderPass, cmdList) {
         if (!renderPass) return;
         const err = gl.getError();
@@ -223,7 +435,9 @@ class RenderContext {
 
                 let shader = renderPass._shaderMap[drawcall._shaderKey];
                 // lazy compile shader
+                let isNewShader = false;
                 if (!shader) {
+                    isNewShader = true;
                     shader = {
                         _program: gl.createProgram(),
                         _uniforms: {}
@@ -267,73 +481,16 @@ class RenderContext {
                 }
                 gl.useProgram(shader._program);
                 // set parameters
-                if (parameters) {
-                    let textureSlot = 0;
-                    for (const name in parameters) {
-                        if (shader._uniforms[name]) {
-                            const loc = shader._uniforms[name].loc;
-                            const size = shader._uniforms[name].size;
-                            const type = shader._uniforms[name].type;
-                            const value = parameters[name];
-                            switch (type) {
-                                case gl.FLOAT:
-                                    if (size > 1) { gl.uniform1fv(loc, value); break; }
-                                    gl.uniform1f(loc, value);
-                                    break;
-                                case gl.FLOAT_VEC2:
-                                    if (size > 1) { gl.uniform2fv(loc, value); break; }
-                                    gl.uniform2f(loc, value[0], value[1]);
-                                    break;
-                                case gl.FLOAT_VEC3:
-                                    if (size > 1) { gl.uniform3fv(loc, value); break; }
-                                    gl.uniform3f(loc, value[0], value[1], value[2]);
-                                    break;
-                                case gl.FLOAT_VEC4:
-                                    if (size > 1) { gl.uniform4fv(loc, value); break; }
-                                    gl.uniform4f(loc, value[0], value[1], value[2], value[3]);
-                                    break;
-                                case gl.INT:
-                                case gl.BOOL:
-                                    if (size > 1) { gl.uniform1iv(loc, value); break; }
-                                    gl.uniform1i(loc, value);
-                                    break;
-                                case gl.INT_VEC2:
-                                case gl.BOOL_VEC2:
-                                    if (size > 1) { gl.uniform2iv(loc, value); break; }
-                                    gl.uniform2i(loc, value[0], value[1]);
-                                    break;
-                                case gl.INT_VEC3:
-                                case gl.BOOL_VEC3:
-                                    if (size > 1) { gl.uniform3iv(loc, value); break; }
-                                    gl.uniform3i(loc, value[0], value[1], value[2]);
-                                    break;
-                                case gl.INT_VEC4:
-                                case gl.BOOL_VEC4:
-                                    if (size > 1) { gl.uniform4iv(loc, value); break; }
-                                    gl.uniform4i(loc, value[0], value[1], value[2], value[3]);
-                                    break;
-                                case gl.FLOAT_MAT2:
-                                    gl.uniformMatrix2fv(loc, false, value);
-                                    break;
-                                case gl.FLOAT_MAT3:
-                                    gl.uniformMatrix3fv(loc, false, value);
-                                    break;
-                                case gl.FLOAT_MAT4:
-                                    gl.uniformMatrix4fv(loc, false, value);
-                                    break;
-                                case gl.SAMPLER_2D:
-                                case gl.SAMPLER_CUBE:
-                                    this.useTexture(value, textureSlot);
-                                    gl.uniform1i(loc, textureSlot++);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    }
+                if (isNewShader) {
+                    Object.assign(renderPass._params, parameters);
+                    this.setShaderParameters(shader, renderPass._params);
+                }
+                else if (parameters) {
+                    Object.assign(renderPass._params, parameters);
+                    this.setShaderParameters(shader, parameters);
                 }
                 // submit drawcall
-                isWebGL2 ? gl.bindVertexArray(drawcall._vao) : ext.bindVertexArrayOES(drawcall._vao);
+                gl.bindVertexArray(drawcall._vao);
 
                 if (drawcall._indicesType) {
                     gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, drawcall._indicesOffset);
@@ -342,7 +499,14 @@ class RenderContext {
                     gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
                 }
 
-                isWebGL2 ? gl.bindVertexArray(null) : ext.bindVertexArrayOES(null);
+                gl.bindVertexArray(null);
+            }
+            else if (parameters) {
+                for (const shaderKey in renderPass._shaderMap) {
+                    const shader = renderPass._shaderMap[shaderKey]
+                    gl.useProgram(shader._program);
+                    this.setShaderParameters(shader, parameters);
+                }
             }
         }
 
@@ -386,7 +550,7 @@ class RenderContext {
     // drawcall
     createDrawcall(primitiveType, vertexCount, attribsInfo) {
         let ret = {
-            _vao: isWebGL2 ? gl.createVertexArray() : ext.createVertexArrayOES(),
+            _vao: gl.createVertexArray(),
             _attribsInfo: attribsInfo,
             _vertexCount: vertexCount,
             _type: primitiveType,
@@ -394,7 +558,7 @@ class RenderContext {
             _indicesOffset: 0,
             _shaderKey: ''
         }
-        isWebGL2 ? gl.bindVertexArray(ret._vao) : ext.bindVertexArrayOES(ret._vao);
+        gl.bindVertexArray(ret._vao);
 
         let attribIndex = 0;
         for (const attribName in attribsInfo) {
@@ -413,12 +577,12 @@ class RenderContext {
             }
         }
 
-        isWebGL2 ? gl.bindVertexArray(null) : ext.bindVertexArrayOES(null);
+        gl.bindVertexArray(null);
         return ret;
     }
 
     destoryDrawcall(drawcall) {
-        isWebGL2 ? gl.deleteVertexArray(drawcall._vao) : ext.deleteVertexArrayOES(drawcall._vao);
+        gl.deleteVertexArray(drawcall._vao);
     }
 }
 
