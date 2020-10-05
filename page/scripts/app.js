@@ -321,6 +321,7 @@ class App {
         this.targetPitch = this.pitch;
         this.targetYaw = this.yaw;
         this.targetRadius = this.radius;
+        this.targetAt = this.at;
 
         this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
         this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
@@ -334,6 +335,7 @@ class App {
         this.startY = y;
         this.recordPitch = this.pitch;
         this.recordYaw = this.yaw;
+        this.recordAt = this.at;
     }
 
     _handleRot(x, y) {
@@ -344,7 +346,11 @@ class App {
     }
 
     _handleMove(x, y) {
-        // todo
+        let deltaX = (this.startX - x) * this.cameraRotSpeed;
+        let deltaY = (y - this.startY) * this.cameraRotSpeed;
+        let RightAndUp = mathUtils.calcOrbitViewRightAndUp(this.pitch, this.yaw);
+        this.targetAt = mathUtils.addVector(this.recordAt, mathUtils.scaleVector(RightAndUp[0], deltaX));
+        this.targetAt = mathUtils.addVector(this.targetAt, mathUtils.scaleVector(RightAndUp[1], deltaY));
     }
 
     _handleScale(scale) {
@@ -355,9 +361,17 @@ class App {
         canvas.onmousedown = (e) => {
             e.preventDefault();
             this._recordStart(e.clientX, e.clientY);
-            canvas.onmousemove = (e) => {
-                e.preventDefault();
-                this._handleRot(e.clientX, e.clientY);
+            if (e.buttons == 1) {
+                canvas.onmousemove = (e) => {
+                    e.preventDefault();
+                    this._handleRot(e.clientX, e.clientY);
+                }
+            }
+            else if (e.buttons == 4) {
+                canvas.onmousemove = (e) => {
+                    e.preventDefault();
+                    this._handleMove(e.clientX, e.clientY);
+                }
             }
             canvas.onmouseup = (e) => {
                 canvas.onmousemove = null;
@@ -400,11 +414,12 @@ class App {
         this.pitch += (this.targetPitch - this.pitch) * amount;
         this.yaw += (this.targetYaw - this.yaw) * amount;
         this.radius += (this.targetRadius - this.radius) * amount;
+        this.at = mathUtils.addVector(mathUtils.scaleVector(mathUtils.subVector(this.targetAt, this.at), amount), this.at);
         this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
     }
 
     _resize(width, height) {
-        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 100, 1000);
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
         rc.setViewport(0, 0, width, height);
         this.width = width;
         this.height = height;
@@ -413,10 +428,10 @@ class App {
         rc.destoryTexture(this.depth);
         this.sceneColor = rc.createTextureFromData(null, rc.textureFormat.R11G11B10, width, height, rc.filterType.POINT);
         this.depth = rc.createDepthTexture(width, height);
-        if (this.testPass) rc.updateRenderPass(this.testPass, {
-            color0  : { texture: this.sceneColor },
-            depth   : { texture: this.depth }
-        });
+        // if (this.testPass) rc.updateRenderPass(this.testPass, {
+        //     color0  : { texture: this.sceneColor },
+        //     depth   : { texture: this.depth }
+        // });
     }
 
     checkSize(canvas) {
@@ -435,10 +450,7 @@ class App {
         this.sceneColor = rc.createTextureFromData(null, rc.textureFormat.R11G11B10, this.width, this.height);
         this.depth = rc.createDepthTexture(this.width, this.height);
         assetUtils.loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
-            this.testPass = rc.createRenderPass('test', vsSrc, fsSrc, {
-                color0  : { texture: this.sceneColor },
-                depth   : { texture: this.depth }
-            });
+            this.testPass = rc.createRenderPass('test', vsSrc, fsSrc);
         });
         // texture
         assetUtils.loadImage('@images/test.jpg', (img) => {
@@ -502,12 +514,12 @@ class App {
         };
         if (drawGLTF(this.gltf, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
         {
-            if (this.testPostProcess0) {
-                rc.execPostProcess(this.testPostProcess0, {
-                    uDepth : this.depth,
-                    uSceneColor : this.sceneColor
-                });
-            }
+            // if (this.testPostProcess0) {
+            //     rc.execPostProcess(this.testPostProcess0, {
+            //         uDepth : this.depth,
+            //         uSceneColor : this.sceneColor
+            //     });
+            // }
         }
         
     }

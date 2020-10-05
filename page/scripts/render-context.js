@@ -394,7 +394,10 @@ class RenderContext {
 
     updateRenderPass(renderPass, outputsInfo) {
         // framebuffer
-        if (renderPass._fbo) gl.deleteFramebuffer(renderPass._fbo);
+        if (renderPass._fbo) {
+            gl.deleteFramebuffer(renderPass._fbo);
+            renderPass._fbo = null;
+        }
         if (outputsInfo) {
             renderPass._fbo = gl.createFramebuffer();
             gl.bindFramebuffer(gl.FRAMEBUFFER, renderPass._fbo);
