@@ -9,12 +9,12 @@ import { renderContext as rc } from './render-context.js'
 
 rc.setDepthFunc(rc.LEQUAL);
 rc.writeDepth(true);
-rc.renderBack(true);
+rc.renderFace(true, false);
 
 const drawcall = rc.createDrawcall(rc.TRIANGLES, vertexCount, {
-    position	: { buffer : vbo, type : rc.FLOAT, byteStride : 20, byteOffset : 0 },
-    uv		: { buffer : vbo, type : rc.FLOAT, byteStride : 20, byteOffset : 12 },
-    indices	: { buffer : ebo, type : rc.USHORT }
+    position	: { buffer : vbo, size : 3, type : rc.FLOAT, byteStride : 20, byteOffset : 0 },
+    uv		    : { buffer : vbo, size : 2, type : rc.FLOAT, byteStride : 20, byteOffset : 12 },
+    indices	  : { buffer : ebo, type : rc.USHORT }
 });
 const renderPass = rc.createRenderPass('test render pass', vsSrc, fsSrc);
 const texture = rc.createTextureFromImage(img, filter, warp);
@@ -27,7 +27,7 @@ rc.execRenderPass(renderPass, cmdList);
 
 rc.setRenderTarget();
 let testPostProcess = rc.createPostProcess(name, fsSrc);
-rc.execPostProcess(testPostProcess, [0, 0, 800, 600], {
+rc.execPostProcess(testPostProcess, {
     sceneColor : color0,
     screenSize : [800, 600]
 });
@@ -39,12 +39,12 @@ rc.execPostProcess(testPostProcess, [0, 0, 800, 600], {
   - [x] Drawcall
   - [x] Texture
   - [x] RenderPass
-  - [ ] RenderTarget
-  - [ ] PostProcess
-- [ ] GLTF
+  - [x] RenderTarget
+  - [x] PostProcess
+- [x] GLTF
   - [x] Mesh
   - [x] VTF Animation
-  - [ ] Material
+  - [x] Material
 - [ ] PostProcess
   - [ ] Bloom
   - [ ] SSR
@@ -52,13 +52,14 @@ rc.execPostProcess(testPostProcess, [0, 0, 800, 600], {
   - [ ] TAA
 - [ ] Rendering
   - [ ] Deferred
-  - [ ] MRT
+  - [x] MRT*
   - [ ] HDRI
   - [ ] IBL
 - [ ] DirectLight
   - [ ] 4xLight(Directional/Point/Spot)
   - [ ] 1xShadowMap
 - [ ] CameraController
+  - [ ] Orbit
   - [ ] TouchControl
   - [ ] FPS
 - [ ] Misc

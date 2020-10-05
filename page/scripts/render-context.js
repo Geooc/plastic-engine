@@ -11,15 +11,35 @@ if (!gl) alert('Your browser or machine may not support webgl.');
 // gl.pixelStorei(gl.UNPACK_ALIGNMENT, alignment);
 
 const hasFilterAnisotropic = getAndApplyExtension("EXT_texture_filter_anisotropic");
-if (!isWebGL2) {
+if (isWebGL2) {
+    if (!getAndApplyExtension("EXT_color_buffer_float")) alert('not support EXT_color_buffer_float!');
+}
+else if (!isWebGL2) {
     if (!getAndApplyExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
     if (!getAndApplyExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
     if (!getAndApplyExtension("OES_texture_half_float")) alert('not support OES_texture_half_float!');
     if (!getAndApplyExtension("OES_texture_half_float_linear")) alert('not support OES_texture_half_float_linear!');
+    if (!getAndApplyExtension("WEBGL_depth_texture")) alert('not support WEBGL_depth_texture!');
+    if (!getAndApplyExtension("EXT_color_buffer_half_float")) alert('not support EXT_color_buffer_half_float!');
+    // unfortunately, ios doesn't support it
+    //if (!getAndApplyExtension("WEBGL_draw_buffers")) alert('not support WEBGL_draw_buffers!');
 }
 
+// post process res
+const ppVsSrc = `
+precision highp float;
+attribute vec2 aPos;
+varying   vec2 vUV;
+
+void main()
+{
+    vUV = aPos * 0.5 + 0.5;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
 // utils
-// Making WebGL1 extensions look like WebGL2. from https://webgl2fundamentals.org/webgl/lessons/webgl1-to-webgl2.html
+// Making WebGL1 extensions look like WebGL2. from: https://webgl2fundamentals.org/webgl/lessons/webgl1-to-webgl2.html
 function getAndApplyExtension(name) {
     const ext = gl.getExtension(name);
     if (!ext) {
@@ -175,8 +195,8 @@ class RenderContext {
         };
 
         this.format2DataFormat = [
-            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED :gl.LUMINANCE,
-            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED :gl.LUMINANCE,
+            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED : gl.LUMINANCE,
+            gl.RGB, gl.RGBA, isWebGL2 ? gl.RED : gl.LUMINANCE,
             gl.RGB
         ];
 
@@ -191,7 +211,12 @@ class RenderContext {
             LEQUAL  : gl.LEQUAL,
         };
 
-        this.renderFace();
+        this.postProcessVbo = this.createVertexBuffer(new Float32Array([ -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0 ]));
+        this.postProcessDrawcall = this.createDrawcall(this.primitiveType.TRIANGLE_STRIP, 4, {
+            aPos : { buffer : this.postProcessVbo, size : 2, type : this.dataType.FLOAT }
+        })
+
+        this.renderFace(true, false);
         this.setDepthFunc(this.depthFunc.LEQUAL);
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -280,7 +305,7 @@ class RenderContext {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, warp);
     }
 
-    createTextureFromImage(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP, sRGB = false) {
+    createTextureFromImage(image, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP, sRGB = false/*todo*/) {
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
@@ -288,7 +313,7 @@ class RenderContext {
         return tex;
     }
 
-    createTextureFromData(data, format, width, height, filter = this.filterType.BILINEAR, warp = this.warpType.CLAMP) {
+    createTextureFromData(data, format, width, height, filter = this.filterType.POINT, warp = this.warpType.CLAMP) {
         const tex = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, tex);
         let dataFormat = this.format2DataFormat[format];
@@ -298,12 +323,14 @@ class RenderContext {
         }
         else {
             if (dataType == gl.FLOAT) {// no sized format on webgl, we convert float array to half array. is there a better way?
-                let halfData = new Uint16Array(data.length);
-                for (let i = 0; i < halfData.length; ++i) {
-                    halfData[i] = toHalf(data[i]);
-                }
                 dataType = gl.HALF_FLOAT;
-                data = halfData;
+                if (data) {
+                    let halfData = new Uint16Array(data.length);
+                    for (let i = 0; i < halfData.length; ++i) {
+                        halfData[i] = toHalf(data[i]);
+                    }
+                    data = halfData;
+                }
             }
             gl.texImage2D(gl.TEXTURE_2D, 0, dataFormat, width, height, 0, dataFormat, dataType, data);
         }
@@ -311,7 +338,15 @@ class RenderContext {
         return tex;
     }
 
-    useTexture(texture, slot = 0) {
+    createDepthTexture(width, height, filter = this.filterType.POINT, warp = this.warpType.CLAMP) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, isWebGL2 ? gl.DEPTH_COMPONENT24 : gl.DEPTH_COMPONENT, width, height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+        this.setTextureSampler(filter, warp, isPowerOf2(width) && isPowerOf2(height));
+        return tex;
+    }
+
+    setTexture(texture, slot = 0) {
         gl.activeTexture(gl.TEXTURE0 + slot);
         gl.bindTexture(gl.TEXTURE_2D, texture);
     }
@@ -326,32 +361,62 @@ class RenderContext {
             name: name,
             _vsSrc: vsSrc,
             _fsSrc: fsSrc,
-            _outputsInfo: outputsInfo,
+            _fbo: null,
             _shaderMap: {},
             _params: {}
         };
+
+        // framebuffer
         if (outputsInfo) {
-            ret.fbo = gl.createFramebuffer();
-            // todo: maybe bind this later?
-            gl.bindFramebuffer(gl.FRAMEBUFFER, ret.fbo);
-            let attachPoint = 0;
-            for (const outputName in outputsInfo) {
-                if (outputName == 'depth') {
-                    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, outputsInfo[outputName].texture, gl.TEXTURE_2D, outputsInfo[outputName].level);
-                }
-                else {
-                    gl.framebufferTexture2D(
-                        gl.FRAMEBUFFER,
-                        gl.COLOR_ATTACHEMENT0 + attachPoint++,
-                        outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
-                        outputsInfo[outputName].texture,
-                        outputsInfo[outputName].level
-                    );
-                }
+            ret._fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, ret._fbo);
+            if (outputsInfo['depth']) {// depth attachment
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, outputsInfo['depth'].texture, 0);
             }
+            let attachPoint = 0;
+            let drawBuffers = [];
+            for (const outputName in outputsInfo) {// color attachments
+                if (outputName == 'depth') continue;
+                gl.framebufferTexture2D(
+                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
+                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
+                    outputsInfo[outputName].texture,
+                    outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
+                );
+                drawBuffers.push(gl.COLOR_ATTACHMENT0 + attachPoint++);
+                if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
+            }
+            if (isWebGL2) gl.drawBuffers(drawBuffers);
         }
 
         return ret;
+    }
+
+    updateRenderPass(renderPass, outputsInfo) {
+        // framebuffer
+        if (renderPass._fbo) gl.deleteFramebuffer(renderPass._fbo);
+        if (outputsInfo) {
+            renderPass._fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, renderPass._fbo);
+            if (outputsInfo['depth']) {// depth attachment
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, outputsInfo['depth'].texture, 0);
+            }
+            let attachPoint = 0;
+            let drawBuffers = [];
+            for (const outputName in outputsInfo) {// color attachments
+                if (outputName == 'depth') continue;
+                gl.framebufferTexture2D(
+                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
+                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
+                    outputsInfo[outputName].texture,
+                    outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
+                );
+                drawBuffers.push(gl.COLOR_ATTACHMENT0 + attachPoint++);
+                if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
+            }
+            if (isWebGL2) gl.drawBuffers(drawBuffers);
+        }
+        this.clearColorAndDepth();
     }
 
     setShaderParameters(shader, parameters) {
@@ -410,7 +475,7 @@ class RenderContext {
                         break;
                     case gl.SAMPLER_2D:
                     case gl.SAMPLER_CUBE:
-                        this.useTexture(value, textureSlot);
+                        this.setTexture(value, textureSlot);
                         gl.uniform1i(loc, textureSlot++);
                         break;
                     default:
@@ -420,12 +485,32 @@ class RenderContext {
         }
     }
 
+    submitDrawcall(drawcall) {
+        gl.bindVertexArray(drawcall._vao);
+
+        if (drawcall._indicesType) {
+            gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, drawcall._indicesOffset);
+        }
+        else {
+            gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
+        }
+
+        gl.bindVertexArray(null);
+    }
+
     execRenderPass(renderPass, cmdList) {
         if (!renderPass) return;
         const err = gl.getError();
         if (err != gl.NO_ERROR) {
             console.log(`Error ${err} caught before RenderPass <${renderPass.name}>`);
         }
+
+        if (renderPass._fbo) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, renderPass._fbo);
+            // todo: load or clear switch
+            this.clearColorAndDepth();
+        }
+        
         for (const cmd of cmdList) {
             const drawcall = cmd.drawcall;
             const parameters = cmd.parameters;
@@ -490,16 +575,7 @@ class RenderContext {
                     this.setShaderParameters(shader, parameters);
                 }
                 // submit drawcall
-                gl.bindVertexArray(drawcall._vao);
-
-                if (drawcall._indicesType) {
-                    gl.drawElements(drawcall._type, drawcall._vertexCount, drawcall._indicesType, drawcall._indicesOffset);
-                }
-                else {
-                    gl.drawArrays(drawcall._type, 0, drawcall._vertexCount);
-                }
-
-                gl.bindVertexArray(null);
+                this.submitDrawcall(drawcall);
             }
             else if (parameters) {
                 for (const shaderKey in renderPass._shaderMap) {
@@ -510,13 +586,97 @@ class RenderContext {
             }
         }
 
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
     destoryRenderPass(renderPass) {
+        if (renderPass._fbo) gl.deleteFramebuffer(renderPass._fbo);
         for (const shader in _shaderMap) {
             gl.deleteProgram(shader._program);
         }
     }
+
+    // postprocess
+    createPostProcess(name, fsSrc, outputsInfo) {
+        let ret = {
+            name : name,
+            _fbo : null,
+            _shader : {
+                _program : gl.createProgram(),
+                _uniforms : {}
+            }
+        };
+
+        // framebuffer
+        if (outputsInfo) {
+            ret._fbo = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, ret._fbo);
+            let attachPoint = 0;
+            let drawBuffers = [];
+            for (const outputName in outputsInfo) {
+                gl.framebufferTexture2D(
+                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
+                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
+                    outputsInfo[outputName].texture,
+                    outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
+                );
+                drawBuffers.push(gl.COLOR_ATTACHMENT0 + attachPoint++);
+                if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
+            }
+            if (isWebGL2) gl.drawBuffers(drawBuffers);
+        }
+
+        // shader
+        const vs = compileShader(gl.VERTEX_SHADER, ppVsSrc);
+        const fs = compileShader(gl.FRAGMENT_SHADER, fsSrc);
+        gl.attachShader(ret._shader._program, vs);
+        gl.attachShader(ret._shader._program, fs);
+        gl.linkProgram(ret._shader._program);
+        gl.deleteShader(vs);
+        gl.deleteShader(fs);
+
+        if (!gl.getProgramParameter(ret._shader._program, gl.LINK_STATUS)) {
+            alert(gl.getProgramInfoLog(ret._shader._program));
+        }
+        else {
+            const uniformsCount = gl.getProgramParameter(ret._shader._program, gl.ACTIVE_UNIFORMS);
+            for (let i = 0; i < uniformsCount; ++i) {
+                const info = gl.getActiveUniform(ret._shader._program, i);
+                ret._shader._uniforms[info.name] = {
+                    size: info.size,
+                    type: info.type,
+                    loc: gl.getUniformLocation(ret._shader._program, info.name)
+                };
+            }
+        }
+
+        return ret;
+    }
+
+    updatePostProcess(postProcess, parameters, outputsInfo) {
+        if (parameters) {
+            // todo
+        }
+        if (outputsInfo) {
+            // todo
+        }
+    }
+
+    execPostProcess(postProcess, parameters) {
+        if (postProcess._fbo) {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, postProcess._fbo);
+        }
+        gl.useProgram(postProcess._shader._program);
+        this.setShaderParameters(postProcess._shader, parameters);
+        this.submitDrawcall(this.postProcessDrawcall);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+
+    destoryPostProcess(postProcess) {
+        gl.deleteFramebuffer(postProcess._fbo);
+        gl.deleteProgram(postProcess._shader._program);
+    }
+
     // buffer
     createBuffer(bufferType, data) {
         const buffer = gl.createBuffer();

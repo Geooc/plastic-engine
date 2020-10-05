@@ -98,12 +98,12 @@ function createGeometryFromGLTF(gltf, gltfArrayBuffers) {
 }
 
 function destoryGeometry(geometry) {
-    for (const mesh in geometry.meshes) {
-        for (const primitive in mesh) {
+    for (const mesh of geometry.meshes) {
+        for (const primitive of mesh) {
             rc.destoryDrawcall(primitive.drawcall);
         }
     }
-    for (const buffer in geometry.buffers) {
+    for (const buffer of geometry.buffers) {
         rc.destoryBuffer(buffer);
     }
 }
@@ -254,14 +254,8 @@ function destoryAnimation(animation) {
     }
 }
 
-function createMaterialsFromGLTF(gltf, gltfPath) {
-    // todo
-}
-
-function drawGLTF(gltf, geometry, animation, viewInfo, renderPass, time) {
-    //console.log('tick')
-    if (!gltf || !geometry || !viewInfo || !renderPass) return;
-    rc.clearColorAndDepth();
+function drawGLTF(gltf, geometry, textures, animation, viewInfo, renderPass, time) {
+    if (!gltf || !geometry || !viewInfo || !renderPass) return false;
 
     let opaqueCmdList = new Array();
     opaqueCmdList.push({
@@ -280,6 +274,8 @@ function drawGLTF(gltf, geometry, animation, viewInfo, renderPass, time) {
             transform = mathUtils.mulMatrices(parentTransform, transform);
             if (node.mesh != undefined) {
                 for (const primitive of geometry.meshes[node.mesh].primitives) {
+                    const material = gltf.materials[primitive.materialId];
+                    // push cmd
                     opaqueCmdList.push({
                         parameters: {
                             uModel: transform,
@@ -291,7 +287,9 @@ function drawGLTF(gltf, geometry, animation, viewInfo, renderPass, time) {
                                     animation.animationDurations[node.skin],
                                     time % animation.animationDurations[node.skin]
                                 )
-                            ]
+                            ],
+                            uBaseColorTex: textures && material.pbrMetallicRoughness.baseColorTexture ? textures[material.pbrMetallicRoughness.baseColorTexture.index] : null,
+                            uNormalTex: textures && material.normalTexture ? textures[material.normalTexture.index] : null,
                         },
                         drawcall: primitive.drawcall
                     });
@@ -302,6 +300,7 @@ function drawGLTF(gltf, geometry, animation, viewInfo, renderPass, time) {
     })(gltf.scenes[gltf.scene].nodes, mathUtils.identityMatrix());
 
     rc.execRenderPass(renderPass, opaqueCmdList);
+    return true;
 }
 
 class App {
@@ -324,7 +323,10 @@ class App {
         this.targetRadius = this.radius;
 
         this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
-        this.viewMat = mathUtils.calcLookAtViewMatrix([-1, 0, 2], [0, 0, 0], [0, 1, 0]);
+        this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
+
+        this.width = 1;
+        this.height = 1;
     }
 
     _recordStart(x, y) {
@@ -402,8 +404,19 @@ class App {
     }
 
     _resize(width, height) {
-        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 100, 1000);
         rc.setViewport(0, 0, width, height);
+        this.width = width;
+        this.height = height;
+
+        rc.destoryTexture(this.sceneColor);
+        rc.destoryTexture(this.depth);
+        this.sceneColor = rc.createTextureFromData(null, rc.textureFormat.R11G11B10, width, height, rc.filterType.POINT);
+        this.depth = rc.createDepthTexture(width, height);
+        if (this.testPass) rc.updateRenderPass(this.testPass, {
+            color0  : { texture: this.sceneColor },
+            depth   : { texture: this.depth }
+        });
     }
 
     checkSize(canvas) {
@@ -419,16 +432,40 @@ class App {
     init() {
         this.addCameraController(rc.getCanvas());
         // renderpass
+        this.sceneColor = rc.createTextureFromData(null, rc.textureFormat.R11G11B10, this.width, this.height);
+        this.depth = rc.createDepthTexture(this.width, this.height);
         assetUtils.loadVertexShaderAndFragmentShader('@shaders/test_vs.glsl', '@shaders/test_fs.glsl', (vsSrc, fsSrc) => {
-            this.testPass = rc.createRenderPass('test', vsSrc, fsSrc);
+            this.testPass = rc.createRenderPass('test', vsSrc, fsSrc, {
+                color0  : { texture: this.sceneColor },
+                depth   : { texture: this.depth }
+            });
         });
         // texture
-        assetUtils.loadImage('@images/test.jpg', (img) => { this.testTexture = rc.createTextureFromImage(img, rc.filterType.ANISOTROPIC); });
+        assetUtils.loadImage('@images/test.jpg', (img) => {
+            this.testTexture = rc.createTextureFromImage(img, rc.filterType.ANISOTROPIC);
+        });
         // gltf
-        assetUtils.loadGLTF('@scene/scene.gltf', (gltf, gltfArrayBuffers) => {
+        const gltfPath = '@scene/scene.gltf';
+        assetUtils.loadGLTF(gltfPath, (gltf, gltfArrayBuffers) => {
             this.gltf = gltf;
             this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
             this.animation = createAnimationsFromGLTF(gltf, gltfArrayBuffers, 0);
+            // textures
+            this.textures = new Array(gltf.textures.length);
+            let imageBindings = {};
+            for (let i = 0; i < gltf.textures.length; ++i) {
+                if (!imageBindings[gltf.textures[i].source]) imageBindings[gltf.textures[i].source] = new Array();
+                imageBindings[gltf.textures[i].source].push(i);
+            }
+            const imgPath = gltfPath.slice(0, gltfPath.lastIndexOf('/') + 1);
+            for (let i = 0; i < gltf.images.length; ++i) {
+                assetUtils.loadImage(imgPath + gltf.images[i].uri, (img) => {
+                    let sRGB = gltf.images[i].uri.slice(0, gltf.images[i].uri.lastIndexOf('.')).endsWith('baseColor');
+                    for (let j = 0; j < imageBindings[i].length; ++j) {
+                        this.textures[imageBindings[i][j]] = rc.createTextureFromImage(img, rc.filterType.ANISOTROPIC, rc.warpType.REPEAT, sRGB);
+                    }
+                });
+            }
             // todo: better camera pos
             if (this.geometry.bounds) {
                 this.at = [
@@ -443,8 +480,13 @@ class App {
                         this.geometry.bounds.max[2] - this.geometry.bounds.min[2],
                     )
                 );
-                this.cameraScaleSpeed = this.targetRadius / 100;
+                this.cameraScaleSpeed = this.targetRadius / 1000;
             }
+        });
+
+        // post process
+        assetUtils.readText('@shaders/testpp_fs.glsl', (fsSrc) => {
+            this.testPostProcess0 = rc.createPostProcess('test pp', fsSrc);
         });
     }
 
@@ -458,7 +500,16 @@ class App {
             projMat : this.projMat,
             testTexture : this.testTexture
         };
-        drawGLTF(this.gltf, this.geometry, this.animation, viewInfo, this.testPass, this.frame);
+        if (drawGLTF(this.gltf, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
+        {
+            if (this.testPostProcess0) {
+                rc.execPostProcess(this.testPostProcess0, {
+                    uDepth : this.depth,
+                    uSceneColor : this.sceneColor
+                });
+            }
+        }
+        
     }
 }
 
