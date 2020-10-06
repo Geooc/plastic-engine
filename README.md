@@ -35,7 +35,7 @@ rc.execPostProcess(testPostProcess, {
 
 ## Road map 2020
 
-- [ ] GraphicsAPI
+- [x] GraphicsAPI
   - [x] Drawcall
   - [x] Texture
   - [x] RenderPass
@@ -59,7 +59,7 @@ rc.execPostProcess(testPostProcess, {
   - [ ] 4xLight(Directional/Point/Spot)
   - [ ] 1xShadowMap
 - [ ] CameraController
-  - [ ] Orbit
+  - [x] Orbit
   - [ ] TouchControl
   - [ ] FPS
 - [ ] Misc

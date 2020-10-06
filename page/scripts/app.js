@@ -17,7 +17,8 @@ const convertAttributeSize = {
     SCALAR  : 1,
     VEC2    : 2,
     VEC3    : 3,
-    VEC4    : 4
+    VEC4    : 4,
+    MAT4    : 16
 };
 
 // gltf utils
@@ -113,7 +114,8 @@ function getFloatArrayBufferView(gltf, ArrayBuffers, accessor) {
     if (accessor.componentType != rc.dataType.FLOAT) alert('only support FLOAT type animation value!');
     let accessorOfs = accessor.byteOffset ? accessor.byteOffset : 0;
     let ofs = (bufferView.byteOffset ? bufferView.byteOffset : 0) + accessorOfs;
-    let length = (bufferView.byteLength - accessorOfs) / 4;
+    let length = convertAttributeSize[accessor.type] * accessor.count;
+    if (!length) alert('wrong accessor count');
     return new Float32Array(ArrayBuffers[bufferView.buffer], ofs, length);
 }
 
@@ -125,8 +127,8 @@ function calcInterpolation(gltf, gltfArrayBuffers, sampler, time) {
     let values = getFloatArrayBufferView(gltf, gltfArrayBuffers, valuesAccessor);
     
     let k = 1;
-    let index = values.length - 1;
-    for (let i = 0; i < keys.length; ++i) {// O(n), but it's ok
+    let index = keys.length - 1;
+    for (let i = 0; i < keys.length; ++i) {// fixme: O(n), can be faster
         if (keys[i] < time) continue;
         else if (keys[i] > time) k = (time - keys[i - 1]) / (keys[i] - keys[i - 1]);
         index = i;
@@ -151,23 +153,23 @@ function calcInterpolation(gltf, gltfArrayBuffers, sampler, time) {
     }
 }
 
-function calcJointLocalTransform(gltf, gltfArrayBuffers, node, animatedJoint, time) {
+function calcAnimatedNodeTransform(gltf, gltfArrayBuffers, node, animatedNode, time) {
     // init as node's local transform
     let trans = node.translation ? node.translation : [0, 0, 0];
     let rot = node.rotation ? node.rotation : [0, 0, 0, 1];
     let scale = node.scale ? node.scale : [1, 1, 1];
 
-    if (animatedJoint.translation) {
-        if (animatedJoint.translation.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
-        trans = calcInterpolation(gltf, gltfArrayBuffers, animatedJoint.translation, time);
+    if (animatedNode.translation) {
+        if (animatedNode.translation.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
+        trans = calcInterpolation(gltf, gltfArrayBuffers, animatedNode.translation, time);
     }
-    if (animatedJoint.rotation) {
-        if (animatedJoint.rotation.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
-        rot = calcInterpolation(gltf, gltfArrayBuffers, animatedJoint.rotation, time);
+    if (animatedNode.rotation) {
+        if (animatedNode.rotation.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
+        rot = calcInterpolation(gltf, gltfArrayBuffers, animatedNode.rotation, time);
     }
-    if (animatedJoint.scale) {
-        if (animatedJoint.scale.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
-        scale = calcInterpolation(gltf, gltfArrayBuffers, animatedJoint.scale, time);
+    if (animatedNode.scale) {
+        if (animatedNode.scale.interpolation != 'LINEAR') alert('only support LINEAR interpolation for now!');
+        scale = calcInterpolation(gltf, gltfArrayBuffers, animatedNode.scale, time);
     }
     return mathUtils.calcTransform(trans, rot, scale);
 }
@@ -176,73 +178,84 @@ function calcAnimationTextureSamplePosY(animFrameCount, animationDuration, time)
     return (time / animationDuration) * (animFrameCount - 1) / animFrameCount + 0.5 / animFrameCount;
 }
 
+function traverseNodes(gltf, gltfArrayBuffers, animatedNodes, time, callback) {
+    (function calcNodesGlobalTransform(nodeIds, parentTransform) {
+        if (!nodeIds) return;
+        for (const nodeId of nodeIds) {
+            const node = gltf.nodes[nodeId];
+            let globalTransform;
+            if (animatedNodes && animatedNodes[nodeId]) {
+                globalTransform = calcAnimatedNodeTransform(gltf, gltfArrayBuffers, node, animatedNodes[nodeId], time);
+                globalTransform = mathUtils.mulMatrices(parentTransform, globalTransform);
+            }
+            else {
+                globalTransform = node.matrix ? node.matrix : mathUtils.calcTransform(node.translation, node.rotation, node.scale);
+                globalTransform = mathUtils.mulMatrices(parentTransform, globalTransform);
+            }
+            callback(nodeId, globalTransform);
+            calcNodesGlobalTransform(node.children, globalTransform);
+        }
+    })(gltf.scenes[gltf.scene].nodes, mathUtils.identityMatrix());
+}
+
 function createAnimationsFromGLTF(gltf, gltfArrayBuffers, animationId = 0) {
     if (!gltf || !gltf.skins || !gltf.animations) return;
 
     let ret = {
         animationTextures : new Array(gltf.skins.length),
-        animationDurations : new Array(gltf.skins.length),
-        animationTexturesSize : new Array(gltf.skins.length)
+        animationTexturesSize : new Array(gltf.skins.length),
+        animationDuration : 0,
+        animatedNodes : null
     };
-    for (let i = 0; i < gltf.skins.length; ++i) {// for each skin bind
-        let animationDuration = 0;
-        let animatedJoints = {};
-        let animation = gltf.animations[animationId];
+    let animatedNodes = {};
+    let animationDuration = 0;
+    let animation = gltf.animations[animationId];
+    // store the sampler and get duration
+    for (let j = 0; j < animation.channels.length; ++j) {
+        let channel = animation.channels[j];
+        let sampler = animation.samplers[channel.sampler];
+        if (!animatedNodes[channel.target.node]) animatedNodes[channel.target.node] = {};
+        animatedNodes[channel.target.node][channel.target.path] = sampler;
+        animationDuration = Math.max(animationDuration, gltf.accessors[sampler.input].max);
+    }
+    ret.animatedNodes = animatedNodes;
+    ret.animationDuration = animationDuration;
+
+    // for each skin bind
+    for (let i = 0; i < gltf.skins.length; ++i) {
+        let nodeJointId = {};
         for (let j = 0; j < gltf.skins[i].joints.length; ++j) {// record joint id
-            animatedJoints[gltf.skins[i].joints[j]] = { jointId : j };
+            nodeJointId[gltf.skins[i].joints[j]] = j;
         }
-        for (let j = 0; j < animation.channels.length; ++j) {// store the sampler and get duration
-            let channel = animation.channels[j];
-            let sampler = animation.samplers[channel.sampler];
-            animatedJoints[channel.target.node][channel.target.path] = sampler;
-            animationDuration = Math.max(animationDuration, gltf.accessors[sampler.input].max);
-        }
-        // get inverse bind matrices
         let invBindMatricesAccessor = gltf.accessors[gltf.skins[i].inverseBindMatrices];
         let invBindMatrices = getFloatArrayBufferView(gltf, gltfArrayBuffers, invBindMatricesAccessor);
-        // gen texture
-        let JointsGlobalMatrices = new Array(animatedJoints.length);
-        function updateAnimation(time) {
-            (function calcAnimatedJointsGlobalTransform(nodeIds, parentTransform) {
-                if (!nodeIds) return;
-                for (const nodeId of nodeIds) {
-                    const node = gltf.nodes[nodeId];
-                    let globalTransform;
-                    if (animatedJoints[nodeId]) {
-                        let jointId = animatedJoints[nodeId].jointId;
-                        // calc animted joint local transform
-                        globalTransform = calcJointLocalTransform(gltf, gltfArrayBuffers, node, animatedJoints[nodeId], time);
-                        globalTransform = mathUtils.mulMatrices(parentTransform, globalTransform);
-                        // set to texture data
-                        let ofs = jointId * 16;
-                        let jointMatrix = mathUtils.mulMatrices(globalTransform, invBindMatrices.slice(ofs, ofs + 16));
-                        let Mat3x4 = new Array();
-                        Mat3x4.push(...jointMatrix.slice(0, 3))
-                        Mat3x4.push(...jointMatrix.slice(4, 7));
-                        Mat3x4.push(...jointMatrix.slice(8, 11));
-                        Mat3x4.push(...jointMatrix.slice(12, 15));
-                        JointsGlobalMatrices[jointId] = Mat3x4;
-                    }
-                    else {
-                        globalTransform = node.matrix ? node.matrix : mathUtils.calcTransform(node.translation, node.rotation, node.scale);
-                        globalTransform = mathUtils.mulMatrices(parentTransform, globalTransform);
-                    }
-                    calcAnimatedJointsGlobalTransform(node.children, globalTransform);
-                }
-            })(gltf.scenes[gltf.scene].nodes, mathUtils.identityMatrix());
-        }
-        let textureRowData = new Array();
+        let jointsGlobalMatrices = new Array(gltf.skins[i].joints.length);
+
+        let textureData = new Array();
         let animFrameCount = Math.floor(animationDuration * 24);// about 24 frames per second
         let d = animationDuration / (animFrameCount - 1);
         for (let t = 0; t < animFrameCount; ++t) {
-            updateAnimation(d * t);
-            for (let j = 0; j < JointsGlobalMatrices.length; ++j) {
-                textureRowData.push(...JointsGlobalMatrices[j]);
+            traverseNodes(gltf, gltfArrayBuffers, animatedNodes, d * t, (nodeId, globalTransform) => {
+                // set to joints data
+                if (nodeJointId[nodeId] != undefined) {
+                    let ofs = nodeJointId[nodeId] * 16;
+                    let jointMatrix = mathUtils.mulMatrices(globalTransform, invBindMatrices.slice(ofs, ofs + 16));
+                    let Mat3x4 = new Array();
+                    Mat3x4.push(...jointMatrix.slice(0, 3))
+                    Mat3x4.push(...jointMatrix.slice(4, 7));
+                    Mat3x4.push(...jointMatrix.slice(8, 11));
+                    Mat3x4.push(...jointMatrix.slice(12, 15));
+                    jointsGlobalMatrices[nodeJointId[nodeId]] = Mat3x4;
+                }
+            });
+
+            for (let j = 0; j < jointsGlobalMatrices.length; ++j) {
+                textureData.push(...jointsGlobalMatrices[j]);
             }
         }
-        ret.animationTextures[i] = rc.createTextureFromData(new Float32Array(textureRowData), rc.textureFormat.RGBA16F, JointsGlobalMatrices.length * 3, animFrameCount, rc.filterType.BILINEAR);
-        ret.animationTexturesSize[i] = [JointsGlobalMatrices.length * 3, animFrameCount];
-        ret.animationDurations[i] = animationDuration;
+        
+        ret.animationTextures[i] = rc.createTextureFromData(new Float32Array(textureData), rc.textureFormat.RGBA16F, jointsGlobalMatrices.length * 3, animFrameCount, rc.filterType.BILINEAR);
+        ret.animationTexturesSize[i] = [jointsGlobalMatrices.length * 3, animFrameCount];
     }
 
     return ret;
@@ -254,9 +267,35 @@ function destoryAnimation(animation) {
     }
 }
 
-function drawGLTF(gltf, geometry, textures, animation, viewInfo, renderPass, time) {
+function getMaterialParametersFromGLTF(gltf, textures, materialId) {
+    // todo: we can create material parameters info while loading gltf
+    if (!gltf || !textures) return null;
+    let material = gltf.materials[materialId];
+
+    let ret = {
+        uBaseColorTex: null,
+        uNormalTex: null,
+    };
+
+    if (material.extensions) {
+        if (material.extensions['KHR_materials_pbrSpecularGlossiness']) {
+            ret.uBaseColorTex = textures[material.extensions['KHR_materials_pbrSpecularGlossiness'].diffuseTexture.index];
+            //ret.uNormalTex = textures[material.normalTexture.index];
+        }
+    }
+    else if (material.pbrMetallicRoughness) {
+        ret.uBaseColorTex = textures[material.pbrMetallicRoughness.baseColorTexture.index];
+        //ret.uNormalTex = textures[material.normalTexture.index];
+    }
+    else alert('this material not supported!');
+
+    return ret;
+}
+
+function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInfo, renderPass, time) {
     if (!gltf || !geometry || !viewInfo || !renderPass) return false;
 
+    let playTime = time % animation.animationDuration;
     let opaqueCmdList = new Array();
     opaqueCmdList.push({
         parameters: {
@@ -264,40 +303,35 @@ function drawGLTF(gltf, geometry, textures, animation, viewInfo, renderPass, tim
             uProj: viewInfo.projMat,
         }
     });
-    //let maskedCmdList = new Array();
-    //let translucentCmdList = new Array();
-    (function drawNodes(nodeIds, parentTransform) {
-        if (!nodeIds) return;
-        for (const nodeId of nodeIds) {
-            const node = gltf.nodes[nodeId];
-            let transform = node.matrix ? node.matrix : mathUtils.calcTransform(node.translation, node.rotation, node.scale);
-            transform = mathUtils.mulMatrices(parentTransform, transform);
-            if (node.mesh != undefined) {
-                for (const primitive of geometry.meshes[node.mesh].primitives) {
-                    const material = gltf.materials[primitive.materialId];
-                    // push cmd
-                    opaqueCmdList.push({
-                        parameters: {
-                            uModel: transform,
-                            uAnimTex: animation.animationTextures[node.skin],
-                            uAnimInfo: [
-                                animation.animationTexturesSize[node.skin][0],
-                                calcAnimationTextureSamplePosY(
-                                    animation.animationTexturesSize[node.skin][1],
-                                    animation.animationDurations[node.skin],
-                                    time % animation.animationDurations[node.skin]
-                                )
-                            ],
-                            uBaseColorTex: textures && material.pbrMetallicRoughness.baseColorTexture ? textures[material.pbrMetallicRoughness.baseColorTexture.index] : null,
-                            uNormalTex: textures && material.normalTexture ? textures[material.normalTexture.index] : null,
-                        },
-                        drawcall: primitive.drawcall
+
+    traverseNodes(gltf, gltfArrayBuffers, animation ? animation.animatedNodes : null, playTime, (nodeId, globalTransform) => {
+        const node = gltf.nodes[nodeId];
+        if (node.mesh != undefined) {
+            for (const primitive of geometry.meshes[node.mesh].primitives) {
+                let parameters = {
+                    uModel: globalTransform
+                }
+                if (animation) {
+                    Object.assign(parameters, {
+                        uAnimTex: node.skin != undefined ? animation.animationTextures[node.skin] : null,
+                        uAnimInfo: node.skin != undefined ? [
+                            animation.animationTexturesSize[node.skin][0],
+                            calcAnimationTextureSamplePosY(
+                                animation.animationTexturesSize[node.skin][1],
+                                animation.animationDuration, playTime
+                            )
+                        ] : [0 , 0]
                     });
                 }
+                Object.assign(parameters, getMaterialParametersFromGLTF(gltf, textures, primitive.materialId));
+                // push cmd
+                opaqueCmdList.push({
+                    parameters: parameters,
+                    drawcall: primitive.drawcall
+                });
             }
-            drawNodes(node.children, transform);
         }
-    })(gltf.scenes[gltf.scene].nodes, mathUtils.identityMatrix());
+    });
 
     rc.execRenderPass(renderPass, opaqueCmdList);
     return true;
@@ -323,11 +357,13 @@ class App {
         this.targetRadius = this.radius;
         this.targetAt = this.at;
 
-        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, 1, 0.1, 1000);
-        this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
-
         this.width = 1;
         this.height = 1;
+        this.near = 0.1;
+        this.far = 10000;
+
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, this.width/this.height, this.near, this.far);
+        this.viewMat = mathUtils.calcOrbitViewMatrix(this.pitch, this.yaw, this.radius, this.at);
     }
 
     _recordStart(x, y) {
@@ -419,7 +455,7 @@ class App {
     }
 
     _resize(width, height) {
-        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, 0.1, 1000);
+        this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, width / height, this.near, this.far);
         rc.setViewport(0, 0, width, height);
         this.width = width;
         this.height = height;
@@ -462,6 +498,7 @@ class App {
             this.gltf = gltf;
             this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
             this.animation = createAnimationsFromGLTF(gltf, gltfArrayBuffers, 0);
+            this.gltfArrayBuffers = gltfArrayBuffers;
             // textures
             this.textures = new Array(gltf.textures.length);
             let imageBindings = {};
@@ -512,7 +549,7 @@ class App {
             projMat : this.projMat,
             testTexture : this.testTexture
         };
-        if (drawGLTF(this.gltf, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
+        if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
         {
             // if (this.testPostProcess0) {
             //     rc.execPostProcess(this.testPostProcess0, {
