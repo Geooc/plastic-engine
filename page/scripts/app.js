@@ -295,7 +295,6 @@ function getMaterialParametersFromGLTF(gltf, textures, materialId) {
 function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInfo, renderPass, time) {
     if (!gltf || !geometry || !viewInfo || !renderPass) return false;
 
-    let playTime = time % animation.animationDuration;
     let opaqueCmdList = new Array();
     opaqueCmdList.push({
         parameters: {
@@ -304,7 +303,7 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
         }
     });
 
-    traverseNodes(gltf, gltfArrayBuffers, animation ? animation.animatedNodes : null, playTime, (nodeId, globalTransform) => {
+    traverseNodes(gltf, gltfArrayBuffers, animation ? animation.animatedNodes : null, time, (nodeId, globalTransform) => {
         const node = gltf.nodes[nodeId];
         if (node.mesh != undefined) {
             for (const primitive of geometry.meshes[node.mesh].primitives) {
@@ -312,6 +311,7 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
                     uModel: globalTransform
                 }
                 if (animation) {
+                    let playTime = time % animation.animationDuration;
                     Object.assign(parameters, {
                         uAnimTex: node.skin != undefined ? animation.animationTextures[node.skin] : null,
                         uAnimInfo: node.skin != undefined ? [
@@ -382,8 +382,8 @@ class App {
     }
 
     _handleMove(x, y) {
-        let deltaX = (this.startX - x) * this.cameraRotSpeed;
-        let deltaY = (y - this.startY) * this.cameraRotSpeed;
+        let deltaX = (this.startX - x) * this.cameraScaleSpeed;
+        let deltaY = (y - this.startY) * this.cameraScaleSpeed;
         let RightAndUp = mathUtils.calcOrbitViewRightAndUp(this.pitch, this.yaw);
         this.targetAt = mathUtils.addVector(this.recordAt, mathUtils.scaleVector(RightAndUp[0], deltaX));
         this.targetAt = mathUtils.addVector(this.targetAt, mathUtils.scaleVector(RightAndUp[1], deltaY));
