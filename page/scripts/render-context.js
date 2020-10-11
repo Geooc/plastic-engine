@@ -425,11 +425,11 @@ class RenderContext {
     setShaderParameters(shader, parameters) {
         let textureSlot = 0;// fixme: the way set texture has problem
         for (const name in parameters) {
-            if (shader._uniforms[name]) {
+            const value = parameters[name];
+            if (value && shader._uniforms[name]) {
                 const loc = shader._uniforms[name].loc;
                 const size = shader._uniforms[name].size;
                 const type = shader._uniforms[name].type;
-                const value = parameters[name];
                 switch (type) {
                     case gl.FLOAT:
                         if (size > 1) { gl.uniform1fv(loc, value); break; }
@@ -676,7 +676,7 @@ class RenderContext {
     }
 
     destoryPostProcess(postProcess) {
-        gl.deleteFramebuffer(postProcess._fbo);
+        if (postProcess._fbo) gl.deleteFramebuffer(postProcess._fbo);
         gl.deleteProgram(postProcess._shader._program);
     }
 

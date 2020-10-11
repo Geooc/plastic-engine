@@ -279,12 +279,14 @@ function getMaterialParametersFromGLTF(gltf, textures, materialId) {
 
     if (material.extensions) {
         if (material.extensions['KHR_materials_pbrSpecularGlossiness']) {
-            ret.uBaseColorTex = textures[material.extensions['KHR_materials_pbrSpecularGlossiness'].diffuseTexture.index];
+            let pbrSpecGloss = material.extensions['KHR_materials_pbrSpecularGlossiness'];
+            ret.uBaseColorTex = pbrSpecGloss.diffuseTexture ? textures[pbrSpecGloss.diffuseTexture.index] : null;
             //ret.uNormalTex = textures[material.normalTexture.index];
         }
     }
     else if (material.pbrMetallicRoughness) {
-        ret.uBaseColorTex = textures[material.pbrMetallicRoughness.baseColorTexture.index];
+        let pbrMetalRough = material.pbrMetallicRoughness;
+        ret.uBaseColorTex = pbrMetalRough.baseColorTexture ? textures[material.pbrMetallicRoughness.baseColorTexture.index] : null;
         //ret.uNormalTex = textures[material.normalTexture.index];
     }
     else alert('this material not supported!');
@@ -302,8 +304,9 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
             uProj: viewInfo.projMat,
         }
     });
+    let playTime = animation ? time % animation.animationDuration : 0;
 
-    traverseNodes(gltf, gltfArrayBuffers, animation ? animation.animatedNodes : null, time, (nodeId, globalTransform) => {
+    traverseNodes(gltf, gltfArrayBuffers, animation ? animation.animatedNodes : null, playTime, (nodeId, globalTransform) => {
         const node = gltf.nodes[nodeId];
         if (node.mesh != undefined) {
             for (const primitive of geometry.meshes[node.mesh].primitives) {
@@ -311,7 +314,6 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
                     uModel: globalTransform
                 }
                 if (animation) {
-                    let playTime = time % animation.animationDuration;
                     Object.assign(parameters, {
                         uAnimTex: node.skin != undefined ? animation.animationTextures[node.skin] : null,
                         uAnimInfo: node.skin != undefined ? [
@@ -393,6 +395,7 @@ class App {
         this.targetRadius = Math.max(this.targetRadius + scale * this.cameraScaleSpeed, 2);
     }
 
+    // todo: needs refactor
     addCameraController(canvas) {
         canvas.onmousedown = (e) => {
             e.preventDefault();
@@ -490,7 +493,8 @@ class App {
         });
         // texture
         assetUtils.loadImage('@images/test.jpg', (img) => {
-            this.testTexture = rc.createTextureFromImage(img, rc.filterType.ANISOTROPIC);
+            this.testTexture = rc.createTextureFromImage(img, rc.filterType.ANISOTROPIC, rc.warpType.REPEAT);
+            this.testTextureSize = [ img.width, img.height ];
         });
         // gltf
         const gltfPath = '@scene/scene.gltf';
@@ -499,7 +503,7 @@ class App {
             this.geometry = createGeometryFromGLTF(gltf, gltfArrayBuffers);
             this.animation = createAnimationsFromGLTF(gltf, gltfArrayBuffers, 0);
             this.gltfArrayBuffers = gltfArrayBuffers;
-            // textures
+            // material textures
             this.textures = new Array(gltf.textures.length);
             let imageBindings = {};
             for (let i = 0; i < gltf.textures.length; ++i) {
@@ -544,21 +548,23 @@ class App {
         this.updateView();
         this.checkSize(rc.getCanvas());
 
-        let viewInfo = {
-            viewMat : this.viewMat,
-            projMat : this.projMat,
-            testTexture : this.testTexture
-        };
-        if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
-        {
-            // if (this.testPostProcess0) {
-            //     rc.execPostProcess(this.testPostProcess0, {
-            //         uDepth : this.depth,
-            //         uSceneColor : this.sceneColor
-            //     });
-            // }
-        }
+        // let viewInfo = {
+        //     viewMat : this.viewMat,
+        //     projMat : this.projMat,
+        //     testTexture : this.testTexture
+        // };
+        // if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
+        // {
+            
+        // }
         
+        if (this.testPostProcess0) {
+            rc.execPostProcess(this.testPostProcess0, {
+                uSceneColor : this.testTexture,
+                uScreenSize : [ this.width, this.height ],
+                uSize : this.testTextureSize
+            });
+        }
     }
 }
 

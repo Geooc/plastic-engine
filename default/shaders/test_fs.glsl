@@ -9,6 +9,6 @@ void main() {
     #ifdef USE_ATTRIB_VEC2_A_UV0
     gl_FragColor = texture2D(uBaseColorTex, vUV);
     #else
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
     #endif
 }
