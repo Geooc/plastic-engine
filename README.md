@@ -6,30 +6,29 @@ WIP
 
 ```js
 import { renderContext as rc } from './render-context.js'
-
+// states
 rc.setDepthFunc(rc.LEQUAL);
 rc.writeDepth(true);
 rc.renderFace(true, false);
-
+// resources
+const sceneTex = rc.createTextureFromData(null, rc.textureFormat.R11G11B10, width, height);
+const depthTex = rc.createDepthTexture(width, height);
 const drawcall = rc.createDrawcall(rc.TRIANGLES, vertexCount, {
     position	: { buffer : vbo, size : 3, type : rc.FLOAT, byteStride : 20, byteOffset : 0 },
     uv		    : { buffer : vbo, size : 2, type : rc.FLOAT, byteStride : 20, byteOffset : 12 },
     indices	  : { buffer : ebo, type : rc.USHORT }
 });
-const renderPass = rc.createRenderPass('test render pass', vsSrc, fsSrc);
-const texture = rc.createTextureFromImage(img, filter, warp);
-
-rc.setRenderTarget({
-    color0 : { texture : tex },
+// render pass
+const renderPass = rc.createRenderPass('test-rp', vsSrc, fsSrc, [
+    color0 : { texture : sceneTex },
     depth  : { texture : depthTex }
-});
+]);
 rc.execRenderPass(renderPass, cmdList);
-
-rc.setRenderTarget();
-let testPostProcess = rc.createPostProcess(name, fsSrc);
-rc.execPostProcess(testPostProcess, {
-    sceneColor : color0,
-    screenSize : [800, 600]
+// post process
+const postProcess = rc.createPostProcess('test-pp', ppSrc);
+rc.execPostProcess(postProcess, {
+    sceneColor : sceneTex,
+    screenSize : [width, height]
 });
 ```
 
@@ -46,21 +45,21 @@ rc.execPostProcess(testPostProcess, {
   - [x] VTF Animation
   - [x] Material
 - [ ] PostProcess
-  - [ ] Bloom
-  - [ ] SSR
   - [ ] Tonemapping
   - [ ] TAA
+  - [ ] Bloom
+  - [ ] SSR
 - [ ] Rendering
-  - [ ] Deferred
   - [x] MRT*
-  - [ ] HDRI
+  - [x] HDRI
+  - [ ] PBR DirectLights
+    - [ ] 4xLight(Directional/Point/Spot)
+    - [ ] 1xShadowMap
   - [ ] IBL
-- [ ] DirectLight
-  - [ ] 4xLight(Directional/Point/Spot)
-  - [ ] 1xShadowMap
+  - [ ] ~~Deferred~~(MRT is not supported on ios)
 - [ ] CameraController
   - [x] Orbit
   - [ ] TouchControl
   - [ ] FPS
 - [ ] Misc
-  - [ ] NodeJS
+  - [ ] NodeJS module
