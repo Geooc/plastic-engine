@@ -536,6 +536,11 @@ class App {
                 this.cameraScaleSpeed = this.targetRadius / 1000;
             }
         });
+        // hdri
+        assetUtils.loadHDRImage('@images/pedestrian_overpass_1k.hdr', (hdri) => {
+            this.hdriTexture = rc.createTextureFromData(hdri.data, rc.textureFormat.R11G11B10, hdri.width, hdri.height, rc.filterType.BILINEAR);
+            this.hdriSize = [hdri.width, hdri.height];
+        });
 
         // post process
         assetUtils.readText('@shaders/testpp_fs.glsl', (fsSrc) => {
@@ -548,21 +553,21 @@ class App {
         this.updateView();
         this.checkSize(rc.getCanvas());
 
-        // let viewInfo = {
-        //     viewMat : this.viewMat,
-        //     projMat : this.projMat,
-        //     testTexture : this.testTexture
-        // };
-        // if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
-        // {
+        let viewInfo = {
+            viewMat : this.viewMat,
+            projMat : this.projMat,
+            testTexture : this.testTexture
+        };
+        if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
+        {
             
-        // }
+        }
         
         if (this.testPostProcess0) {
             rc.execPostProcess(this.testPostProcess0, {
-                uSceneColor : this.testTexture,
+                uSceneColor : this.hdriTexture,
                 uScreenSize : [ this.width, this.height ],
-                uSize : this.testTextureSize
+                uSize : this.hdriSize
             });
         }
     }
