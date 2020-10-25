@@ -63,3 +63,19 @@ rc.execPostProcess(postProcess, {
   - [ ] FPS
 - [ ] Misc
   - [ ] NodeJS module
+
+## Road map 2021
+
+- [ ] GLTF
+  - [ ] Morph Target
+  - [ ] GLB/Base64buffer
+  - [ ] Extension
+- [ ] Web page
+- [ ] Rendering
+  - [ ] Matcap
+  - [ ] Spherical Harmonics
+  - [ ] Terrain
+  - [ ] Ocaen
+  - [ ] Atmosphere
+- [ ] PostProcess
+  - [ ] DoF

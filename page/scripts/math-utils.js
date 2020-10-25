@@ -10,6 +10,10 @@ let mathUtils = {
     calcPerspectiveProjMatrix : function(fovy, aspect, near, far) {
         return mat4.perspective(mat4.create(), this.degreeToRadian(fovy), aspect, near, far);
     },
+
+    calcOrthogonalProjMatrix : function(left, right, bottom, top, near, far) {
+        return mat4.ortho(mat4.create(), left, right, bottom, top, near, far);
+    },
     
     calcLookAtViewMatrix : function(eye, at, up) {
         return mat4.lookAt(mat4.create(), eye, at, up);
@@ -45,6 +49,18 @@ let mathUtils = {
         vec3.normalize(up, vec3.cross(up, right, front));
         return [ right, up ];
     },
+
+    getViewVectorFromViewMatrix : function(viewMat) {
+        //
+    },
+
+    getRightVectorFromViewMatrix : function(viewMat) {
+        //
+    },
+
+    getUpVectorFromViewMatrix : function(viewMat) {
+        //
+    },
     
     calcTransform : function(translate, rotation, scale) {
         return mat4.fromRotationTranslationScale(mat4.create(), rotation ? rotation : [0, 0, 0, 1], translate ? translate : [0, 0, 0], scale ? scale : [1, 1, 1]);
@@ -56,6 +72,10 @@ let mathUtils = {
     
     identityMatrix : function() {
         return mat4.create();
+    },
+
+    invMatrix : function(mat) {
+        return mat4.invert(mat4.create(), mat);
     },
 
     addVector : function(vector0, vector1) {

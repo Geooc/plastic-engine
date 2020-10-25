@@ -14,7 +14,7 @@ const hasFilterAnisotropic = getAndApplyExtension("EXT_texture_filter_anisotropi
 if (isWebGL2) {
     if (!getAndApplyExtension("EXT_color_buffer_float")) alert('not support EXT_color_buffer_float!');
 }
-else if (!isWebGL2) {
+else {
     if (!getAndApplyExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
     if (!getAndApplyExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
     if (!getAndApplyExtension("OES_texture_half_float")) alert('not support OES_texture_half_float!');
@@ -267,10 +267,6 @@ class RenderContext {
     }
 
     // texture
-    createCubeMap(format, width, height, filter, warp, needMipmaps) {
-        // todo
-    }
-
     setTextureSampler(filter, warp, isPowerOf2, isCubemap = false) {
         if (!isWebGL2 && !isPowerOf2) {
             if (filter != this.filterType.POINT) filter = this.filterType.BILINEAR;
@@ -346,9 +342,52 @@ class RenderContext {
         return tex;
     }
 
+    createCubemapFromData(data, format, width, height, filter = this.filterType.BILINEAR, warp = this.warpType.REPEAT, needMipmaps = false) {
+        let cubemap = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubemap);
+        let dataFormat = this.format2DataFormat[format];
+        let dataType = format > 2 ? gl.FLOAT : gl.UNSIGNED_BYTE;
+        if (isWebGL2) {
+            for (let i = 0; i < 6; ++i) {
+                gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, this.format2SizedFormat[format], width, height, 0, dataFormat, dataType, data ? data[i] : null);
+            }
+        }
+        else {
+            for (let i = 0; i < 6; ++i) {
+                if (dataType == gl.FLOAT) {// no sized format on webgl, we convert float array to half array. is there a better way?
+                    dataType = gl.HALF_FLOAT;
+                    if (data && data[i]) {
+                        let halfData = new Uint16Array(data[i].length);
+                        for (let j = 0; j < halfData.length; ++i) {
+                            halfData[j] = toHalf(data[i][j]);
+                        }
+                        data[i] = halfData;
+                    }
+                }
+                gl.texImage2D(gl.TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, dataFormat, width, height, 0, dataFormat, dataType, data ? data[i] : null);
+            }
+            
+        }
+        //this.setTextureSampler(filter, warp, isPowerOf2(width) && isPowerOf2(height));
+        return cubemap;
+    }
+
     setTexture(texture, slot = 0) {
         gl.activeTexture(gl.TEXTURE0 + slot);
         gl.bindTexture(gl.TEXTURE_2D, texture);
+    }
+
+    setCubemap(cubemap, slot = 0) {
+        gl.activeTexture(gl.TEXTURE0 + slot);
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubemap);
+    }
+
+    autoGenTextureMipmaps() {
+        gl.generateMipmap(gl.TEXTURE_2D);
+    }
+
+    autoGenCubemapMipmaps() {
+        gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
     }
 
     destoryTexture(texture) {
@@ -356,46 +395,10 @@ class RenderContext {
     }
 
     // render pass
-    createRenderPass(name, vsSrc, fsSrc, outputsInfo) {
-        let ret = {
-            name: name,
-            _vsSrc: vsSrc,
-            _fsSrc: fsSrc,
-            _fbo: null,
-            _shaderMap: {},
-            _params: {}
-        };
-
-        // framebuffer
-        if (outputsInfo) {
-            ret._fbo = gl.createFramebuffer();
-            gl.bindFramebuffer(gl.FRAMEBUFFER, ret._fbo);
-            if (outputsInfo['depth']) {// depth attachment
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, outputsInfo['depth'].texture, 0);
-            }
-            let attachPoint = 0;
-            let drawBuffers = [];
-            for (const outputName in outputsInfo) {// color attachments
-                if (outputName == 'depth') continue;
-                gl.framebufferTexture2D(
-                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
-                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
-                    outputsInfo[outputName].texture,
-                    outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
-                );
-                drawBuffers.push(gl.COLOR_ATTACHMENT0 + attachPoint++);
-                if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
-            }
-            if (isWebGL2) gl.drawBuffers(drawBuffers);
-        }
-
-        return ret;
-    }
-
-    updateRenderPass(renderPass, outputsInfo) {
+    updateRenderTarget(renderPass, outputsInfo) {
         // framebuffer
         if (renderPass._fbo) {
-            gl.deleteFramebuffer(renderPass._fbo);
+            gl.deleteFramebuffer(renderPass._fbo);// really need to delete?
             renderPass._fbo = null;
         }
         if (outputsInfo) {
@@ -410,7 +413,7 @@ class RenderContext {
                 if (outputName == 'depth') continue;
                 gl.framebufferTexture2D(
                     gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
-                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
+                    outputsInfo[outputName].face != undefined ? (gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face) : gl.TEXTURE_2D,
                     outputsInfo[outputName].texture,
                     outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
                 );
@@ -418,8 +421,23 @@ class RenderContext {
                 if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
             }
             if (isWebGL2) gl.drawBuffers(drawBuffers);
+            this.clearColorAndDepth();// todo: choose clear or load
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         }
-        this.clearColorAndDepth();
+    }
+
+    createRenderPass(name, vsSrc, fsSrc, outputsInfo) {
+        let ret = {
+            name: name,
+            _vsSrc: vsSrc,
+            _fsSrc: fsSrc,
+            _fbo: null,
+            _shaderMap: {},
+            _params: {}
+        };
+        // create render target
+        this.updateRenderTarget(ret, outputsInfo);
+        return ret;
     }
 
     setShaderParameters(shader, parameters) {
@@ -477,8 +495,11 @@ class RenderContext {
                         gl.uniformMatrix4fv(loc, false, value);
                         break;
                     case gl.SAMPLER_2D:
-                    case gl.SAMPLER_CUBE:
                         this.setTexture(value, textureSlot);
+                        gl.uniform1i(loc, textureSlot++);
+                        break;
+                    case gl.SAMPLER_CUBE:
+                        this.setCubemap(value, textureSlot);
                         gl.uniform1i(loc, textureSlot++);
                         break;
                     default:
@@ -511,7 +532,7 @@ class RenderContext {
         if (renderPass._fbo) {
             gl.bindFramebuffer(gl.FRAMEBUFFER, renderPass._fbo);
             // todo: load or clear switch
-            this.clearColorAndDepth();
+            //this.clearColorAndDepth();
         }
         
         for (const cmd of cmdList) {
@@ -594,7 +615,7 @@ class RenderContext {
 
     destoryRenderPass(renderPass) {
         if (renderPass._fbo) gl.deleteFramebuffer(renderPass._fbo);
-        for (const shader in _shaderMap) {
+        for (const shader in renderPass._shaderMap) {
             gl.deleteProgram(shader._program);
         }
     }
@@ -609,25 +630,8 @@ class RenderContext {
                 _uniforms : {}
             }
         };
-
-        // framebuffer
-        if (outputsInfo) {
-            ret._fbo = gl.createFramebuffer();
-            gl.bindFramebuffer(gl.FRAMEBUFFER, ret._fbo);
-            let attachPoint = 0;
-            let drawBuffers = [];
-            for (const outputName in outputsInfo) {
-                gl.framebufferTexture2D(
-                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + attachPoint,
-                    outputsInfo[outputName].face ? gl.TEXTURE_CUBE_MAP_POSITIVE_X + outputsInfo[outputName].face : gl.TEXTURE_2D,
-                    outputsInfo[outputName].texture,
-                    outputsInfo[outputName].level ? outputsInfo[outputName].level : 0
-                );
-                drawBuffers.push(gl.COLOR_ATTACHMENT0 + attachPoint++);
-                if (!isWebGL2) break;// because ios doesn't support WEBGL_draw_buffers, so close mrt for webgl1
-            }
-            if (isWebGL2) gl.drawBuffers(drawBuffers);
-        }
+        // create render target
+        this.updateRenderTarget(ret, outputsInfo);
 
         // shader
         const vs = compileShader(gl.VERTEX_SHADER, ppVsSrc);
@@ -654,15 +658,6 @@ class RenderContext {
         }
 
         return ret;
-    }
-
-    updatePostProcess(postProcess, parameters, outputsInfo) {
-        if (parameters) {
-            // todo
-        }
-        if (outputsInfo) {
-            // todo
-        }
     }
 
     execPostProcess(postProcess, parameters) {

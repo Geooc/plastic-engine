@@ -111,11 +111,11 @@ function destoryGeometry(geometry) {
 
 function getFloatArrayBufferView(gltf, ArrayBuffers, accessor) {
     let bufferView = gltf.bufferViews[accessor.bufferView];
-    if (accessor.componentType != rc.dataType.FLOAT) alert('only support FLOAT type animation value!');
+    if (accessor.componentType != rc.dataType.FLOAT) alert('must be FLOAT component type!');
     let accessorOfs = accessor.byteOffset ? accessor.byteOffset : 0;
     let ofs = (bufferView.byteOffset ? bufferView.byteOffset : 0) + accessorOfs;
     let length = convertAttributeSize[accessor.type] * accessor.count;
-    if (!length) alert('wrong accessor count');
+    if (!length) alert('wrong accessor count!');
     return new Float32Array(ArrayBuffers[bufferView.buffer], ofs, length);
 }
 
@@ -339,6 +339,55 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
     return true;
 }
 
+// IBL
+function createIBL(hdriTexture) {
+    let ret = {
+        diffCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, 512, 512),// ?
+        specCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, 512, 512),
+        isReady : false
+    };
+
+    assetUtils.loadVertexShaderAndFragmentShader('@shaders/env_cubemap_vs.glsl', '@shaders/env_cubemap_fs.glsl', (vsSrc, fsSrc) => {
+        let envCubemapRenderPass = rc.createRenderPass('env cubemap', vsSrc, fsSrc);
+        let vbo = rc.createVertexBuffer(new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]));
+        let drawcall = rc.createDrawcall(rc.primitiveType.TRIANGLE_STRIP, 4, {
+            aPos: { buffer: vbo, size: 2, type: rc.dataType.FLOAT }
+        })
+        const projMat = mathUtils.calcPerspectiveProjMatrix(90, 1, 1, 10);
+        let invViewProjMats = new Array(6);
+        invViewProjMats[0] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [1, 0, 0], [0, -1, 0])));
+        invViewProjMats[1] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [-1, 0, 0], [0, -1, 0])));
+        invViewProjMats[2] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, 1, 0], [0, 0, 1])));
+        invViewProjMats[3] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, -1, 0], [0, 0, -1])));
+        invViewProjMats[4] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, 0, 1], [0, -1, 0])));
+        invViewProjMats[5] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, 0, -1], [0, -1, 0])));
+
+        rc.setViewport(0, 0, 512, 512);
+        for (let i = 0; i < 6; ++i) {
+            rc.updateRenderTarget(envCubemapRenderPass, {
+                color0: { texture: ret.specCubemap, face: i }
+            });
+            rc.clearColorAndDepth();
+            rc.execRenderPass(envCubemapRenderPass, [{
+                drawcall: drawcall,
+                parameters: {
+                    uInvViewProj: invViewProjMats[i],
+                    uHDRI: hdriTexture
+                }
+            }]);
+        }
+        rc.autoGenCubemapMipmaps();
+        ret.isReady = true;
+
+        rc.destoryTexture(hdriTexture);
+        rc.destoryRenderPass(envCubemapRenderPass);
+        rc.destoryDrawcall(drawcall);
+        rc.destoryBuffer(vbo);
+    });
+
+    return ret;
+}
+
 class App {
     constructor() {
         this.frame = 0;
@@ -538,10 +587,9 @@ class App {
         });
         // hdri
         assetUtils.loadHDRImage('@images/pedestrian_overpass_1k.hdr', (hdri) => {
-            this.hdriTexture = rc.createTextureFromData(hdri.data, rc.textureFormat.R11G11B10, hdri.width, hdri.height, rc.filterType.BILINEAR);
-            this.hdriSize = [hdri.width, hdri.height];
+            let hdriTexture = rc.createTextureFromData(hdri.data, rc.textureFormat.R11G11B10, hdri.width, hdri.height, rc.filterType.BILINEAR);
+            this.IBL = createIBL(hdriTexture);
         });
-
         // post process
         assetUtils.readText('@shaders/testpp_fs.glsl', (fsSrc) => {
             this.testPostProcess0 = rc.createPostProcess('test pp', fsSrc);
@@ -552,6 +600,7 @@ class App {
         this.updateTime(now);
         this.updateView();
         this.checkSize(rc.getCanvas());
+        rc.setViewport(0,0,this.width,this.height);
 
         let viewInfo = {
             viewMat : this.viewMat,
@@ -559,15 +608,15 @@ class App {
             testTexture : this.testTexture
         };
         if (drawGLTF(this.gltf, this.gltfArrayBuffers, this.geometry, this.textures, this.animation, viewInfo, this.testPass, this.frame))
-        {
-            
-        }
-        
-        if (this.testPostProcess0) {
+        {}
+
+        if (this.testPostProcess0 && this.IBL && this.IBL.isReady) {
             rc.execPostProcess(this.testPostProcess0, {
-                uSceneColor : this.hdriTexture,
-                uScreenSize : [ this.width, this.height ],
-                uSize : this.hdriSize
+                uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
+                uCubemap: this.IBL.specCubemap,
+                uScreenSize: [this.width, this.height],
+                uSceneColor: this.testTexture,
+                uSize: this.testTextureSize
             });
         }
     }
