@@ -341,9 +341,10 @@ function drawGLTF(gltf, gltfArrayBuffers, geometry, textures, animation, viewInf
 
 // IBL
 function createIBL(hdriTexture) {
+    const res = 1024;
     let ret = {
-        diffCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, 512, 512),// ?
-        specCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, 512, 512),
+        specCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, res, res),
+        diffCubemap : rc.createCubemapFromData(null, rc.textureFormat.R11G11B10, res, res),
         isReady : false
     };
 
@@ -362,7 +363,7 @@ function createIBL(hdriTexture) {
         invViewProjMats[4] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, 0, 1], [0, -1, 0])));
         invViewProjMats[5] = mathUtils.invMatrix(mathUtils.mulMatrices(projMat, mathUtils.calcLookAtViewMatrix([0, 0, 0], [0, 0, -1], [0, -1, 0])));
 
-        rc.setViewport(0, 0, 512, 512);
+        rc.setViewport(0, 0, res, res);
         for (let i = 0; i < 6; ++i) {
             rc.updateRenderTarget(envCubemapRenderPass, {
                 color0: { texture: ret.specCubemap, face: i }
@@ -376,7 +377,7 @@ function createIBL(hdriTexture) {
                 }
             }]);
         }
-        rc.autoGenCubemapMipmaps();
+        rc.autoGenCubemapMipmaps(ret.specCubemap);
         ret.isReady = true;
 
         rc.destoryTexture(hdriTexture);

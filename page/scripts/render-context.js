@@ -382,11 +382,13 @@ class RenderContext {
         gl.bindTexture(gl.TEXTURE_CUBE_MAP, cubemap);
     }
 
-    autoGenTextureMipmaps() {
+    autoGenTextureMipmaps(texture) {
+        this.setTexture(texture);
         gl.generateMipmap(gl.TEXTURE_2D);
     }
 
-    autoGenCubemapMipmaps() {
+    autoGenCubemapMipmaps(cubemap) {
+        this.setCubemap(cubemap);
         gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
     }
 
