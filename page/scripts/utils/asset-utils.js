@@ -86,31 +86,7 @@ let assetUtils = {
         };
         xhr.send();
     },
-    
-    loadGLTF : function(url, callback) {
-        const path = url.slice(0, url.lastIndexOf('/') + 1);
-        let xhr = new XMLHttpRequest();
-        xhr.open('GET', url);
-        xhr.onload = () => {
-            const gltf = JSON.parse(xhr.responseText);
-            if (!gltf || !gltf.buffers) {
-                alert('wrong gltf file!');
-                return;
-            }
-            // load buffers first
-            let gltfArrayBuffers = new Array(gltf.buffers.length);
-            let loadedArrayBuffersCount = 0;
-            for (let i = 0; i < gltf.buffers.length; ++i) {
-                this.loadBinaryAsArrayBuffer(path + gltf.buffers[i].uri, (arrayBuffer) => {
-                    gltfArrayBuffers[i] = arrayBuffer;
-                    if (++loadedArrayBuffersCount == gltf.buffers.length) {
-                        callback(gltf, gltfArrayBuffers);
-                    }
-                });
-            }
-        };
-        xhr.send();
-    },
 };
 
 export { assetUtils }
+

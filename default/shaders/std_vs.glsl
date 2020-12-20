@@ -1,4 +1,15 @@
-#ifdef USE_ATTRIB_VEC2_A_UV0
+precision highp float;
+
+attribute vec4 aLocalPosition;
+attribute vec3 aNormal;
+attribute vec3 aTangent;
+attribute vec2 aUV0;
+attribute vec2 aUV1;
+attribute vec2 aUV2;
+attribute vec4 aJoints;
+attribute vec4 aWeights;
+
+#ifdef USE_ATTRIB_A_UV0
 varying vec2 vUV;
 #endif
 
@@ -8,7 +19,7 @@ uniform mat4 uProj;
 uniform sampler2D uAnimTex;
 uniform vec2 uAnimInfo;
 
-#ifdef USE_ATTRIB_VEC4_A_JOINTS
+#ifdef USE_ATTRIB_A_JOINTS
 mat4 getMixedJointMatrix(float jointId) {
     vec4 pixel0 = texture2D(uAnimTex, vec2((jointId * 3.0 + 0.5) / uAnimInfo.x, uAnimInfo.y));
     vec4 pixel1 = texture2D(uAnimTex, vec2((jointId * 3.0 + 1.5) / uAnimInfo.x, uAnimInfo.y));
@@ -32,14 +43,14 @@ mat4 calcAnimatedTransform() {
 #endif
 
 void main() {
-    #ifdef USE_ATTRIB_VEC2_A_UV0
+#ifdef USE_ATTRIB_A_UV0
     vUV = aUV0;
-    #endif
+#endif
 
-    #ifdef USE_ATTRIB_VEC4_A_JOINTS
+#ifdef USE_ATTRIB_A_JOINTS
     mat4 finalTransform = calcAnimatedTransform();
-    #else
+#else
     mat4 finalTransform = uModel;
-    #endif
-    gl_Position = uProj * uView * finalTransform * vec4(aLocalPosition, 1.0);
+#endif
+    gl_Position = uProj * uView * finalTransform * vec4(aLocalPosition.rgb, 1.0);
 }
