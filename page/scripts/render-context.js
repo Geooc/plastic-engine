@@ -856,8 +856,9 @@ class RenderPass {
         if (this._blendFunc != curBlendFunc) {
             if (this._blendFunc == BlendFunc.BLEND_OPAQUE) gl.disable(gl.BLEND);
             else {
+                gl.enable(gl.BLEND);
                 if (this._blendFunc == BlendFunc.BLEND_TRANSLUCENT) gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-                else alert('unsupported blend func!');// todo: more blend func
+                else error('unsupported blend func!');// todo: more blend func
             }
             curBlendFunc = this._blendFunc;
         }
@@ -896,6 +897,7 @@ class RenderPass {
                 shader.bind().setParameters(this._shaderParams);
                 this._shaderMap[drawcall.getShaderKey()] = shader;
             }
+            // set per drawcall parameters
             shader.bind().setParameters(drawcall.parameters);
             drawcall.submit();
         }
@@ -917,7 +919,18 @@ class RenderPass {
 
 class RenderContext {
     constructor() {
-        Object.assign(this, DataType, BufferType, PrimitiveType, TextureType, PixelFormat, FilterType, WarpType, DepthFunc, BlendFunc, CullFace);
+        Object.assign(this,
+            DataType,
+            BufferType,
+            PrimitiveType,
+            TextureType,
+            PixelFormat,
+            FilterType,
+            WarpType,
+            DepthFunc,
+            BlendFunc,
+            CullFace
+        );
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clearDepth(1.0);
