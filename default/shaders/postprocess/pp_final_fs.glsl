@@ -3,9 +3,12 @@
 precision highp float;
 
 varying vec2 vUV;
+varying vec3 vViewDir;
 uniform sampler2D uInput;
+uniform samplerCube uBackGround;
 
 void main() {
-    gl_FragColor = texture2D(uInput, vUV);
+    vec4 sceneColor = texture2D(uInput, vUV);
+    gl_FragColor = sceneColor.a > 1e-05 ? sceneColor : textureCube(uBackGround, normalize(vViewDir));
 }
 

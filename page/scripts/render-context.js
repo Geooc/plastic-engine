@@ -9,24 +9,24 @@ if (!gl) {
     isWebGL2 = false;
     gl = canvas.getContext('webgl');
 }
-if (!gl) alert('Your browser or machine may not support webgl.');
+if (!gl) error('Your browser or machine may not support webgl.');
 
 // const alignment = 1;
 // gl.pixelStorei(gl.UNPACK_ALIGNMENT, alignment);
 
 const hasFilterAnisotropic = getAndApplyExtension("EXT_texture_filter_anisotropic");
 if (isWebGL2) {
-    if (!getAndApplyExtension("EXT_color_buffer_float")) alert('not support EXT_color_buffer_float!');
+    if (!getAndApplyExtension("EXT_color_buffer_float")) error('not support EXT_color_buffer_float!');
 }
 else {
-    if (!getAndApplyExtension("OES_vertex_array_object")) alert('not support OES_vertex_array_object!');
-    if (!getAndApplyExtension("OES_element_index_uint")) alert('not support OES_element_index_uint!');
-    if (!getAndApplyExtension("OES_texture_half_float")) alert('not support OES_texture_half_float!');
-    if (!getAndApplyExtension("OES_texture_half_float_linear")) alert('not support OES_texture_half_float_linear!');
-    if (!getAndApplyExtension("WEBGL_depth_texture")) alert('not support WEBGL_depth_texture!');
-    if (!getAndApplyExtension("EXT_color_buffer_half_float")) alert('not support EXT_color_buffer_half_float!');
+    if (!getAndApplyExtension("OES_vertex_array_object")) error('not support OES_vertex_array_object!');
+    if (!getAndApplyExtension("OES_element_index_uint")) error('not support OES_element_index_uint!');
+    if (!getAndApplyExtension("OES_texture_half_float")) error('not support OES_texture_half_float!');
+    if (!getAndApplyExtension("OES_texture_half_float_linear")) error('not support OES_texture_half_float_linear!');
+    if (!getAndApplyExtension("WEBGL_depth_texture")) error('not support WEBGL_depth_texture!');
+    if (!getAndApplyExtension("EXT_color_buffer_half_float")) error('not support EXT_color_buffer_half_float!');
     // unfortunately, ios doesn't support it
-    //if (!getAndApplyExtension("WEBGL_draw_buffers")) alert('not support WEBGL_draw_buffers!');
+    //if (!getAndApplyExtension("WEBGL_draw_buffers")) error('not support WEBGL_draw_buffers!');
 }
 
 // utils
@@ -73,7 +73,7 @@ function compileShader(type, src) {
     gl.compileShader(shader);
 
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        alert(gl.getShaderInfoLog(shader));
+        error(gl.getShaderInfoLog(shader));
         return null;
     }
 
@@ -600,12 +600,15 @@ class Shader {
             const uniformsCount = gl.getProgramParameter(this._program, gl.ACTIVE_UNIFORMS);
             for (let i = 0; i < uniformsCount; ++i) {
                 const info = gl.getActiveUniform(this._program, i);
+                const loc = gl.getUniformLocation(this._program, info.name);
                 this._uniforms[info.name] = {
                     size: info.size,
                     type: info.type,
-                    loc: gl.getUniformLocation(this._program, info.name)
+                    loc: loc
                 };
                 if (info.type == gl.SAMPLER_2D || info.type == gl.SAMPLER_CUBE) {
+                    this.bind();
+                    gl.uniform1i(loc, allocateTextureSlot);
                     this._textures[info.name] = allocateTextureSlot++;
                 }
             }
@@ -675,9 +678,7 @@ class Shader {
                 // maybe textures should be bound more frequently?
                 case gl.SAMPLER_2D:
                 case gl.SAMPLER_CUBE:
-                    const slot = this._textures[name];
-                    value.bind(slot);
-                    gl.uniform1i(loc, slot);
+                    value.bind(this._textures[name]);
                     break;
                 default:
                     check(false, 'should never go here!');
@@ -932,7 +933,7 @@ class RenderContext {
             CullFace
         );
 
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
         gl.clearDepth(1.0);
         gl.enable(gl.DEPTH_TEST);
         gl.depthFunc(curDepthFunc);
