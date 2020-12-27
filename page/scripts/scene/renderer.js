@@ -13,8 +13,8 @@ let screenDrawcall = rc.createDrawcall(rc.PRIM_TRIANGLE_STRIP, 4).bind().setAttr
 function createIBL(hdriPath) {
     const envCubemapRes = 512;
     const radianceRes = 256;
-    const irradianceRes = 32;
-    const brdfLutRes = 32;
+    const irradianceRes = 16;
+    const brdfLutRes = 16;
     let ret = {
         radianceMap : null,//rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
@@ -94,11 +94,11 @@ function createIBL(hdriPath) {
         pass.setViewport(0, 0, irradianceRes, irradianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
         asyncLoadCallback();
     });
-    // rc.createRenderPassFromSourcePath('brdf lut', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/brdf_lut_fs.glsl', (pass) => {
-    //     brdfPass = pass;
-    //     pass.setViewport(0, 0, brdfLutRes, brdfLutRes).setDepthFunc(rc.ZTEST_ALWAYS);
-    //     asyncLoadCallback();
-    // });
+    rc.createRenderPassFromSourcePath('brdf lut', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/brdf_lut_fs.glsl', (pass) => {
+        brdfPass = pass;
+        pass.setViewport(0, 0, brdfLutRes, brdfLutRes).setDepthFunc(rc.ZTEST_ALWAYS);
+        asyncLoadCallback();
+    });
 
     return ret;
 }
@@ -154,6 +154,7 @@ class Renderer {
 
         // draw meshes
         this.stdRenderPass.setShaderParameters({
+            uIrradianceMap: this.ibl.irradianceMap,
             uView: this.viewMat,
             uProj: this.projMat
         }).execute(opaqueList, this.hdrRT);
@@ -162,7 +163,7 @@ class Renderer {
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
             uInput: this.sceneColor,
-            uBackGround: this.ibl.irradianceMap
+            uBackGround: this.ibl.radianceMap
         }).execute([screenDrawcall]);
     }
 

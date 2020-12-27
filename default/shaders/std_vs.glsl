@@ -12,6 +12,9 @@ attribute vec4 aWeights;
 #ifdef USE_ATTRIB_A_UV0
 varying vec2 vUV;
 #endif
+varying vec3 vT;
+varying vec3 vB;
+varying vec3 vN;
 
 uniform mat4 uModel;
 uniform mat4 uView;
@@ -53,4 +56,10 @@ void main() {
     mat4 finalTransform = uModel;
 #endif
     gl_Position = uProj * uView * finalTransform * vec4(aLocalPosition.rgb, 1.0);
+    
+    vT = normalize(vec3(finalTransform * vec4(aTangent, 0.0)));
+    vN = normalize(vec3(finalTransform * vec4(aNormal, 0.0)));
+    // re-orthogonalize T with respect to N
+    vT = normalize(vT - dot(vT, vN) * vN);
+    vB = cross(vT, vN);
 }

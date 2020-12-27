@@ -1,5 +1,8 @@
 precision highp float;
 
+#define PI 3.14159265359
+#define INV_PI 0.318309886
+
 #ifndef USE_NORMAL_TEX
 #define USE_NORMAL_TEX 0
 #endif
@@ -19,6 +22,11 @@ precision highp float;
 #ifdef USE_ATTRIB_A_UV0
 varying vec2 vUV;
 #endif
+varying vec3 vT;
+varying vec3 vB;
+varying vec3 vN;
+
+uniform samplerCube uIrradianceMap;
 
 uniform sampler2D uBaseColorTex;
 uniform sampler2D uNormalTex;
@@ -39,10 +47,24 @@ struct MaterialParameters {
     float ao;
 };
 
+float sRGBToLinear( float Color ) 
+{
+	Color = max(6.10352e-5, Color); // minimum positive non-denormal (fixes black problem on DX11 AMD and NV)
+	return Color > 0.04045 ? pow( Color * (1.0 / 1.055) + 0.0521327, 2.4 ) : Color * (1.0 / 12.92);
+}
+
+vec3 sRGBToLinear( vec3 Color )
+{
+    Color.r = sRGBToLinear(Color.r);
+    Color.g = sRGBToLinear(Color.g);
+    Color.b = sRGBToLinear(Color.b);
+    return Color;
+}
+
 MaterialParameters GetMaterialParameters(vec2 uv) {
     MaterialParameters params;
 #if USE_BASECOLOR_TEX
-    params.baseColor = texture2D(uBaseColorTex, uv).rgb;
+    params.baseColor = sRGBToLinear(texture2D(uBaseColorTex, uv).rgb);
 #else
     params.baseColor = uBaseColorFactor;
 #endif
@@ -75,6 +97,16 @@ void main() {
 #else
     MaterialParameters matParams = GetMaterialParameters(vec2(0.0, 0.0));
 #endif
-    gl_FragColor = vec4(matParams.baseColor, 1.0);
+    mat3 tbn = mat3(normalize(vT), normalize(vB), normalize(vN));
+    vec3 worldNormal = tbn * matParams.normal;
+
+    vec3 irradiance = textureCube(uIrradianceMap, worldNormal).rgb;
+    vec3 radiance = vec3(0.0);// todo
+
+    vec3 diffuse = matParams.baseColor * INV_PI * irradiance;
+    vec3 speculat = vec3(0.0);// todo
+
+    gl_FragColor.rgb = diffuse;
+    gl_FragColor.a = 1.0;
 }
 

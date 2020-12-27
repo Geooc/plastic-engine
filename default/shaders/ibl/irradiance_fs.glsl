@@ -1,5 +1,8 @@
 // irradiance_fs.glsl
+#if !WEBGL2_CONTEXT
 #extension GL_EXT_shader_texture_lod : enable
+#define textureCubeLod textureCubeLodEXT
+#endif
 
 #define PI 3.14159265359
 #define INV_PI 0.318309886
@@ -10,9 +13,7 @@ varying vec3 vViewDir;
 
 uniform samplerCube uHDRI;
 
-float ConvolutionSamplesOffset = 0.;
 const int ConvolutionSampleCount = 4096;
-const int ConvolutionMaxSamples = 4096;
 
 float reversebits(int n, int base)
 {
@@ -75,11 +76,9 @@ vec3 ImportanceSample (vec3 N)
             
             float solidAngleTexel = 4. * PI / (6. * 256. * 256.);
             float solidAngleSample = 1.0 / (float(ConvolutionSampleCount) * pdf);
-            float lod = 0.5 * log2(float(solidAngleSample / solidAngleTexel));
+            float lod = 0.5 * log2(float(solidAngleSample / solidAngleTexel)) + 3.;
 
-            vec3 diffuseSample = textureCubeLodEXT(uHDRI, H, lod+3.).rgb;
-            result.rgb += diffuseSample;
-            result.w++;
+            result += vec4(textureCubeLod(uHDRI, H, lod).rgb, 1.0);
         }
     }
     if (result.w == 0.0)

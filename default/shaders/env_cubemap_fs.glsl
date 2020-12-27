@@ -18,6 +18,6 @@ void main()
 {
     vec2 uv = ViewVectorToUV(normalize(vViewDir));
     uv.y = 1. - uv.y;// flip y
-    gl_FragColor = min(texture2D(uHDRI, uv), 65535.);
+    gl_FragColor = min(texture2D(uHDRI, uv), 8192.);
 }
 

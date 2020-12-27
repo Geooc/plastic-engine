@@ -19,9 +19,24 @@ vec3 ACESToneMapping(vec3 color, float adapted_lum)
 	return (color * (A * color + B)) / (color * (C * color + D) + E);
 }
 
+float LinearToSrgb(float lin) 
+{
+	if(lin < 0.00313067) return lin * 12.92;
+	return pow(lin, (1.0/2.4)) * 1.055 - 0.055;
+}
+
+vec3 LinearToSrgb(vec3 Color)
+{
+	Color.r = LinearToSrgb(Color.r);
+	Color.g = LinearToSrgb(Color.g);
+	Color.b = LinearToSrgb(Color.b);
+	return Color;
+}
+
 void main() {
     vec4 sceneColor = texture2D(uInput, vUV);
-    gl_FragColor = sceneColor.a > 1e-05 ? sceneColor : textureCube(uBackGround, normalize(vViewDir));
-    gl_FragColor.rgb = ACESToneMapping(gl_FragColor.rgb, 0.5);
+    gl_FragColor = sceneColor.a > 1e-03 ? sceneColor : textureCube(uBackGround, normalize(vViewDir));
+    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
+	gl_FragColor.a = 1.0;
 }
 
