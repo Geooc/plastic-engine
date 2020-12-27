@@ -3,7 +3,7 @@ import { check, error } from './utils/debug-utils.js'
 import { assetUtils } from './utils/asset-utils.js'
 
 const canvas = document.querySelector('#glcanvas');
-let gl = canvas.getContext('webgl2');
+let gl = canvas.getContext('webgl1');
 let isWebGL2 = true;
 if (!gl) {
     isWebGL2 = false;
@@ -25,6 +25,7 @@ else {
     if (!getAndApplyExtension("OES_texture_half_float_linear")) error('not support OES_texture_half_float_linear!');
     if (!getAndApplyExtension("WEBGL_depth_texture")) error('not support WEBGL_depth_texture!');
     if (!getAndApplyExtension("EXT_color_buffer_half_float")) error('not support EXT_color_buffer_half_float!');
+    if (!getAndApplyExtension("EXT_shader_texture_lod")) error('not support EXT_shader_texture_lod!');
     // unfortunately, ios doesn't support it
     //if (!getAndApplyExtension("WEBGL_draw_buffers")) error('not support WEBGL_draw_buffers!');
 }
@@ -819,7 +820,7 @@ class RenderPass {
     }
 
     getShaderMacros() {
-        let ret = '';
+        let ret = isWebGL2 ? '#define WEBGL2_CONTEXT 1\n' : '#define WEBGL2_CONTEXT 0\n';
         for (const flagName in this._shaderFlags) {
             ret += `#define ${flagName} ${this._shaderFlags[flagName]}\n`;
         }

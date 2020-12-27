@@ -38,24 +38,37 @@ function createIBL(hdriPath) {
     let brdfPass;
 
     let asyncLoadCallback = () => {
-        if (hdriTexture && envCubePass) {
+        if (hdriTexture && envCubePass && irradiancePass) {
             // render target
-            let envCubeRT = rc.createRenderTarget();
+            let renderTarget = rc.createRenderTarget();
+            // convert to cubemap
             let envCubeMap = rc.createTexture(rc.TEX_CUBE).bind().setData(envCubemapRes, envCubemapRes, rc.PIXEL_R11G11B10F, null);
-            // draw
             envCubePass.setShaderParameters({
                 uHDRI: hdriTexture
             });
             for (let i = 0; i < 6; ++i) {
-                envCubeRT.bind().setColorAttachments([{ texture: envCubeMap, face: i }]);
+                renderTarget.bind().setColorAttachments([{ texture: envCubeMap, face: i }]);
                 envCubePass.setShaderParameters({
                     uInvViewProj: invViewProjMats[i]
-                }).execute([screenDrawcall], envCubeRT);
+                }).execute([screenDrawcall], renderTarget);
             }
-            // finish
             envCubeMap.bind().setSampler(rc.FILTER_TRILINEAR);
-            envCubeRT.destory();
+
+            // irradiance
+            irradiancePass.setShaderParameters({
+                uHDRI: envCubeMap
+            });
+            for (let i = 0; i < 6; ++i) {
+                renderTarget.bind().setColorAttachments([{ texture: ret.irradianceMap, face: i }]);
+                irradiancePass.setShaderParameters({
+                    uInvViewProj: invViewProjMats[i]
+                }).execute([screenDrawcall], renderTarget);
+            }
+            ret.irradianceMap.bind().setSampler(rc.FILTER_TRILINEAR);
+
+            // finish
             envCubePass.destory();
+            renderTarget.destory();
 
             ret.radianceMap = envCubeMap;
         }
@@ -76,12 +89,12 @@ function createIBL(hdriPath) {
     //     pass.setViewport(0, 0, radianceRes, radianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
     //     asyncLoadCallback();
     // });
-    // rc.createRenderPassFromSourcePath('irradiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/irradiance_fs.glsl', (pass) => {
-    //     irradiancePass = pass;
-    //     pass.setViewport(0, 0, irradianceRes, irradianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
-    //     asyncLoadCallback();
-    // });
-    // rc.createRenderPassFromSourcePath('irradiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/brdf_lut_fs.glsl', (pass) => {
+    rc.createRenderPassFromSourcePath('irradiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/irradiance_fs.glsl', (pass) => {
+        irradiancePass = pass;
+        pass.setViewport(0, 0, irradianceRes, irradianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
+        asyncLoadCallback();
+    });
+    // rc.createRenderPassFromSourcePath('brdf lut', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/brdf_lut_fs.glsl', (pass) => {
     //     brdfPass = pass;
     //     pass.setViewport(0, 0, brdfLutRes, brdfLutRes).setDepthFunc(rc.ZTEST_ALWAYS);
     //     asyncLoadCallback();
@@ -149,7 +162,7 @@ class Renderer {
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
             uInput: this.sceneColor,
-            uBackGround: this.ibl.radianceMap
+            uBackGround: this.ibl.irradianceMap
         }).execute([screenDrawcall]);
     }
 
