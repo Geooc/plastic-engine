@@ -11,9 +11,10 @@ let screenDrawcall = rc.createDrawcall(rc.PRIM_TRIANGLE_STRIP, 4).bind().setAttr
 
 // todo: IBL
 function createIBL(hdriPath) {
-    const radianceRes = 1024;
-    const irradianceRes = 256;
-    const brdfLutRes = 64;
+    const envCubemapRes = 512;
+    const radianceRes = 256;
+    const irradianceRes = 32;
+    const brdfLutRes = 32;
     let ret = {
         radianceMap : null,//rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
@@ -40,7 +41,7 @@ function createIBL(hdriPath) {
         if (hdriTexture && envCubePass) {
             // render target
             let envCubeRT = rc.createRenderTarget();
-            let envCubeMap = rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null);
+            let envCubeMap = rc.createTexture(rc.TEX_CUBE).bind().setData(envCubemapRes, envCubemapRes, rc.PIXEL_R11G11B10F, null);
             // draw
             envCubePass.setShaderParameters({
                 uHDRI: hdriTexture
@@ -66,7 +67,7 @@ function createIBL(hdriPath) {
     });
     rc.createRenderPassFromSourcePath('env cubemap', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/env_cubemap_fs.glsl', (pass) => {
         envCubePass = pass;
-        pass.setViewport(0, 0, radianceRes, radianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
+        pass.setViewport(0, 0, envCubemapRes, envCubemapRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
         asyncLoadCallback();
     });
     // todo
