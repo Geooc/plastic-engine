@@ -16,7 +16,7 @@ function createIBL(hdriPath) {
     const irradianceRes = 32;
     const brdfLutRes = 16;
     let ret = {
-        radianceMap : null,//rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
+        radianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
         brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGB16F, null)
     };
@@ -38,7 +38,7 @@ function createIBL(hdriPath) {
     let brdfPass;
 
     let asyncLoadCallback = () => {
-        if (hdriTexture && envCubePass && irradiancePass && brdfPass) {
+        if (hdriTexture && envCubePass && irradiancePass && radiancePass && brdfPass) {
             // render target
             let renderTarget = rc.createRenderTarget();
             // convert to cubemap
@@ -66,16 +66,32 @@ function createIBL(hdriPath) {
             }
             ret.irradianceMap.bind().setSampler(rc.FILTER_TRILINEAR);
 
+            // radiance
+            radiancePass.setShaderParameters({
+                uHDRI: envCubeMap
+            });
+            ret.radianceMap.bind().setSampler(rc.FILTER_TRILINEAR);
+            for (let i = 0; i < 6; ++i) {
+                radiancePass.setShaderParameters({
+                    uInvViewProj: invViewProjMats[i]
+                });
+                for (let level = 0; level < 1; ++level) {
+                    renderTarget.bind().setColorAttachments([{ texture: ret.radianceMap, face: i, level: level }]);
+                    radiancePass.setShaderParameters({
+                        uRoughness: level / 4
+                    }).execute([screenDrawcall], renderTarget);
+                }
+            }
+
             // brdf
             renderTarget.bind().setColorAttachments([{ texture: ret.brdfLut }]);
             brdfPass.execute([screenDrawcall], renderTarget);
             ret.brdfLut.bind().setSampler(rc.FILTER_BILINEAR);
 
             // finish
+            envCubeMap.destory();
             envCubePass.destory();
             renderTarget.destory();
-
-            ret.radianceMap = envCubeMap;
         }
     }
 
@@ -83,17 +99,16 @@ function createIBL(hdriPath) {
         hdriTexture = tex;
         asyncLoadCallback();
     });
-    rc.createRenderPassFromSourcePath('env cubemap', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/env_cubemap_fs.glsl', (pass) => {
+    rc.createRenderPassFromSourcePath('env cubemap', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/env_cubemap_fs.glsl', (pass) => {
         envCubePass = pass;
         pass.setViewport(0, 0, envCubemapRes, envCubemapRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
         asyncLoadCallback();
     });
-    // todo
-    // rc.createRenderPassFromSourcePath('radiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/radiance_fs.glsl', (pass) => {
-    //     radiancePass = pass;
-    //     pass.setViewport(0, 0, radianceRes, radianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
-    //     asyncLoadCallback();
-    // });
+    rc.createRenderPassFromSourcePath('radiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/radiance_fs.glsl', (pass) => {
+        radiancePass = pass;
+        pass.setViewport(0, 0, radianceRes, radianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
+        asyncLoadCallback();
+    });
     rc.createRenderPassFromSourcePath('irradiance', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/ibl/irradiance_fs.glsl', (pass) => {
         irradiancePass = pass;
         pass.setViewport(0, 0, irradianceRes, irradianceRes).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
@@ -160,7 +175,7 @@ class Renderer {
         // maybe some postprocess
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
-            uBackGround: this.ibl.radianceMap,
+            uBackGround: this.ibl.irradianceMap,
             uBRDF: this.ibl.brdfLut,
             uBufferSize: [this.canvas.width, this.canvas.height],
             uInputSize: [16, 16]

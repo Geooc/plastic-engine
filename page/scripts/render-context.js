@@ -16,18 +16,19 @@ if (!gl) error('Your browser or machine may not support webgl.');
 
 const hasFilterAnisotropic = getAndApplyExtension("EXT_texture_filter_anisotropic");
 if (isWebGL2) {
-    if (!getAndApplyExtension("EXT_color_buffer_float")) error('not support EXT_color_buffer_float!');
+    getAndApplyExtension("EXT_color_buffer_float");
 }
 else {
-    if (!getAndApplyExtension("OES_vertex_array_object")) error('not support OES_vertex_array_object!');
-    if (!getAndApplyExtension("OES_element_index_uint")) error('not support OES_element_index_uint!');
-    if (!getAndApplyExtension("OES_texture_half_float")) error('not support OES_texture_half_float!');
-    if (!getAndApplyExtension("OES_texture_half_float_linear")) error('not support OES_texture_half_float_linear!');
-    if (!getAndApplyExtension("WEBGL_depth_texture")) error('not support WEBGL_depth_texture!');
-    if (!getAndApplyExtension("EXT_color_buffer_half_float")) error('not support EXT_color_buffer_half_float!');
-    if (!getAndApplyExtension("EXT_shader_texture_lod")) error('not support EXT_shader_texture_lod!');
-    // unfortunately, ios doesn't support it
-    //if (!getAndApplyExtension("WEBGL_draw_buffers")) error('not support WEBGL_draw_buffers!');
+    getAndApplyExtension("OES_vertex_array_object");
+    getAndApplyExtension("OES_element_index_uint");
+    getAndApplyExtension("OES_texture_half_float");
+    getAndApplyExtension("OES_texture_half_float_linear");
+    getAndApplyExtension("WEBGL_depth_texture");
+    getAndApplyExtension("EXT_color_buffer_half_float");
+    getAndApplyExtension("EXT_shader_texture_lod");
+    // unfortunately, safari doesn't support it
+    //getAndApplyExtension("WEBGL_draw_buffers");
+    //getAndApplyExtension("OES_fbo_render_mipmap");
 }
 
 // utils
@@ -35,6 +36,7 @@ else {
 function getAndApplyExtension(name) {
     const ext = gl.getExtension(name);
     if (!ext) {
+        error(`not support ext ${name}!`);
         return null;
     }
     const fnSuffix = name.split("_")[0];

@@ -1,4 +1,8 @@
 // pp_final_fs.glsl: final pass
+#if !WEBGL2_CONTEXT
+#extension GL_EXT_shader_texture_lod : enable
+#define textureCubeLod textureCubeLodEXT
+#endif
 
 precision highp float;
 
@@ -35,11 +39,11 @@ vec3 LinearToSrgb(vec3 Color)
 }
 
 void main() {
-    gl_FragColor = textureCube(uBackGround, normalize(vViewDir));
+    gl_FragColor = textureCubeLod(uBackGround, normalize(vViewDir), 0.);
     gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
 	gl_FragColor.a = 1.0;
 
-	vec2 extent = abs(vKeepAspectUV - 0.5);
-	gl_FragColor = max(extent.x, extent.y) <= 0.5 ? texture2D(uBRDF, vKeepAspectUV) : vec4(0.0);
+	//vec2 extent = abs(vKeepAspectUV - 0.5);
+	//gl_FragColor = max(extent.x, extent.y) <= 0.5 ? texture2D(uBRDF, vKeepAspectUV) : vec4(0.0);
 }
 
