@@ -4,7 +4,6 @@ precision highp float;
 
 varying vec2 vUV;
 varying vec3 vViewDir;
-uniform sampler2D uInput;
 uniform samplerCube uBackGround;
 
 vec3 ACESToneMapping(vec3 color, float adapted_lum)
@@ -34,8 +33,7 @@ vec3 LinearToSrgb(vec3 Color)
 }
 
 void main() {
-    vec4 sceneColor = texture2D(uInput, vUV);
-    gl_FragColor = sceneColor.a > 1e-03 ? sceneColor : textureCube(uBackGround, normalize(vViewDir));
+    gl_FragColor = textureCube(uBackGround, normalize(vViewDir));
     gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
 	gl_FragColor.a = 1.0;
 }

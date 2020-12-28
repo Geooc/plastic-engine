@@ -13,7 +13,7 @@ let screenDrawcall = rc.createDrawcall(rc.PRIM_TRIANGLE_STRIP, 4).bind().setAttr
 function createIBL(hdriPath) {
     const envCubemapRes = 512;
     const radianceRes = 256;
-    const irradianceRes = 16;
+    const irradianceRes = 32;
     const brdfLutRes = 16;
     let ret = {
         radianceMap : null,//rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
@@ -124,24 +124,17 @@ class Renderer {
             canvas.height = displayHeight;
             
             this.projMat = mathUtils.calcPerspectiveProjMatrix(this.fovy, displayWidth / displayHeight, this.near, this.far);
-            this.sceneColor.bind().setData(this.canvas.width, this.canvas.height, rc.PIXEL_RGBA16F);
-            this.sceneDepth.bind().setData(this.canvas.width, this.canvas.height, rc.PIXEL_DEPTH);
         }
     }
 
     init() {
-        this.sceneColor = rc.createTexture(rc.TEX_2D).bind().setData(this.canvas.width, this.canvas.height, rc.PIXEL_RGBA16F).setSampler(rc.FILTER_NEAREST);
-        this.sceneDepth = rc.createTexture(rc.TEX_2D).bind().setData(this.canvas.width, this.canvas.height, rc.PIXEL_DEPTH).setSampler(rc.FILTER_NEAREST);
-        this.hdrRT = rc.createRenderTarget().bind()
-            .setColorAttachments([{ texture: this.sceneColor }])
-            .setDepthAttachment({ texture: this.sceneDepth });
         // IBL
         this.ibl = createIBL('@images/pedestrian_overpass_1k.hdr');
         // standard pass
         this.stdRenderPass = rc.createRenderPassFromSourcePath('std', '@shaders/std_vs.glsl', '@shaders/std_fs.glsl').setLoadAction(false, false);
         // final pass
         this.finalPass = rc.createRenderPassFromSourcePath('final', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/postprocess/pp_final_fs.glsl')
-            .setLoadAction(false, false).setDepthFunc(rc.ZTEST_ALWAYS).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
+            .setLoadAction(true, true).setDepthFunc(rc.ZTEST_LEQUAL).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
     }
 
     renderScene() {
@@ -157,12 +150,11 @@ class Renderer {
             uIrradianceMap: this.ibl.irradianceMap,
             uView: this.viewMat,
             uProj: this.projMat
-        }).execute(opaqueList, this.hdrRT);
+        }).execute(opaqueList);
 
         // maybe some postprocess
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
-            uInput: this.sceneColor,
             uBackGround: this.ibl.radianceMap
         }).execute([screenDrawcall]);
     }

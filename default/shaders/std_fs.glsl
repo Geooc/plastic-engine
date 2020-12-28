@@ -47,6 +47,18 @@ struct MaterialParameters {
     float ao;
 };
 
+vec3 ACESToneMapping(vec3 color, float adapted_lum)
+{
+	const float A = 2.51;
+	const float B = 0.03;
+	const float C = 2.43;
+	const float D = 0.59;
+	const float E = 0.14;
+
+	color *= adapted_lum;
+	return (color * (A * color + B)) / (color * (C * color + D) + E);
+}
+
 float sRGBToLinear( float Color ) 
 {
 	Color = max(6.10352e-5, Color); // minimum positive non-denormal (fixes black problem on DX11 AMD and NV)
@@ -59,6 +71,20 @@ vec3 sRGBToLinear( vec3 Color )
     Color.g = sRGBToLinear(Color.g);
     Color.b = sRGBToLinear(Color.b);
     return Color;
+}
+
+float LinearToSrgb(float lin) 
+{
+	if(lin < 0.00313067) return lin * 12.92;
+	return pow(lin, (1.0/2.4)) * 1.055 - 0.055;
+}
+
+vec3 LinearToSrgb(vec3 Color)
+{
+	Color.r = LinearToSrgb(Color.r);
+	Color.g = LinearToSrgb(Color.g);
+	Color.b = LinearToSrgb(Color.b);
+	return Color;
 }
 
 MaterialParameters GetMaterialParameters(vec2 uv) {
@@ -104,9 +130,11 @@ void main() {
     vec3 radiance = vec3(0.0);// todo
 
     vec3 diffuse = matParams.baseColor * INV_PI * irradiance;
-    vec3 speculat = vec3(0.0);// todo
+    vec3 specular = vec3(0.0);// todo
 
     gl_FragColor.rgb = diffuse;
+
+    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
     gl_FragColor.a = 1.0;
 }
 

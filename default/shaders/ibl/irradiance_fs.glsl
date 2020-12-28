@@ -45,7 +45,7 @@ vec3 importanceSampleDiffuse(vec2 Xi, vec3 N )
 {
     float CosTheta = 1.0-Xi.y;
     float SinTheta = sqrt(1.0-CosTheta*CosTheta);
-    float Phi = float(2)*PI*Xi.x;
+    float Phi = 2.*PI*Xi.x;
 
     vec3 H;
     H.x = SinTheta * cos( Phi );
@@ -78,7 +78,7 @@ vec3 ImportanceSample (vec3 N)
             float solidAngleSample = 1.0 / (float(ConvolutionSampleCount) * pdf);
             float lod = 0.5 * log2(float(solidAngleSample / solidAngleTexel)) + 3.;
 
-            result += vec4(textureCubeLod(uHDRI, H, lod).rgb, 1.0);
+            result += vec4(textureCubeLod(uHDRI, H, lod).rgb * NoL, 1.0);
         }
     }
     if (result.w == 0.0)
