@@ -10,6 +10,12 @@ varying vec3 vViewDir;
 uniform mat4 uInvViewProj;
 #endif
 
+#ifdef KEEP_INPUT_ASPECT
+varying vec2 vKeepAspectUV;
+uniform vec2 uInputSize;
+uniform vec2 uBufferSize;
+#endif
+
 void main()
 {
     vUV = aPos * 0.5 + 0.5;
@@ -17,6 +23,13 @@ void main()
 #ifdef USE_CUBEMAP_TEXCOORD
     vec4 viewCoord = uInvViewProj * gl_Position;
     vViewDir = normalize(viewCoord.xyz / viewCoord.w);
+#endif
+
+#ifdef KEEP_INPUT_ASPECT
+    vec2 st = vUV - 0.5;// centered
+    vec2 wh = uBufferSize / uInputSize;
+    st *= wh / min(wh.x, wh.y);// keep aspect
+    vKeepAspectUV = st + 0.5;
 #endif
 }
 

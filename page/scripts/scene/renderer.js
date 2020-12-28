@@ -18,7 +18,7 @@ function createIBL(hdriPath) {
     let ret = {
         radianceMap : null,//rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
-        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_R11G11B10F, null)
+        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGB16F, null)
     };
 
     // matrices
@@ -38,7 +38,7 @@ function createIBL(hdriPath) {
     let brdfPass;
 
     let asyncLoadCallback = () => {
-        if (hdriTexture && envCubePass && irradiancePass) {
+        if (hdriTexture && envCubePass && irradiancePass && brdfPass) {
             // render target
             let renderTarget = rc.createRenderTarget();
             // convert to cubemap
@@ -65,6 +65,11 @@ function createIBL(hdriPath) {
                 }).execute([screenDrawcall], renderTarget);
             }
             ret.irradianceMap.bind().setSampler(rc.FILTER_TRILINEAR);
+
+            // brdf
+            renderTarget.bind().setColorAttachments([{ texture: ret.brdfLut }]);
+            brdfPass.execute([screenDrawcall], renderTarget);
+            ret.brdfLut.bind().setSampler(rc.FILTER_BILINEAR);
 
             // finish
             envCubePass.destory();
@@ -134,7 +139,7 @@ class Renderer {
         this.stdRenderPass = rc.createRenderPassFromSourcePath('std', '@shaders/std_vs.glsl', '@shaders/std_fs.glsl').setLoadAction(false, false);
         // final pass
         this.finalPass = rc.createRenderPassFromSourcePath('final', '@shaders/postprocess/pp_common_vs.glsl', '@shaders/postprocess/pp_final_fs.glsl')
-            .setLoadAction(true, true).setDepthFunc(rc.ZTEST_LEQUAL).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1);
+            .setLoadAction(true, true).setDepthFunc(rc.ZTEST_LEQUAL).setShaderFlag('USE_CUBEMAP_TEXCOORD', 1).setShaderFlag('KEEP_INPUT_ASPECT', 1);
     }
 
     renderScene() {
@@ -155,7 +160,10 @@ class Renderer {
         // maybe some postprocess
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
-            uBackGround: this.ibl.radianceMap
+            uBackGround: this.ibl.radianceMap,
+            uBRDF: this.ibl.brdfLut,
+            uBufferSize: [this.canvas.width, this.canvas.height],
+            uInputSize: [16, 16]
         }).execute([screenDrawcall]);
     }
 

@@ -4,7 +4,9 @@ precision highp float;
 
 varying vec2 vUV;
 varying vec3 vViewDir;
+varying vec2 vKeepAspectUV;
 uniform samplerCube uBackGround;
+uniform sampler2D uBRDF;
 
 vec3 ACESToneMapping(vec3 color, float adapted_lum)
 {
@@ -36,5 +38,8 @@ void main() {
     gl_FragColor = textureCube(uBackGround, normalize(vViewDir));
     gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
 	gl_FragColor.a = 1.0;
+
+	vec2 extent = abs(vKeepAspectUV - 0.5);
+	gl_FragColor = max(extent.x, extent.y) <= 0.5 ? texture2D(uBRDF, vKeepAspectUV) : vec4(0.0);
 }
 
