@@ -81,10 +81,8 @@ vec3 ImportanceSample (vec3 N)
             result += vec4(textureCubeLod(uHDRI, H, lod).rgb * NoL, 1.0);
         }
     }
-    if (result.w == 0.0)
-        return result.xyz;
-    else
-        return (result.xyz / result.w);
+    
+    return result.xyz / result.w;
 }
 
 void main()

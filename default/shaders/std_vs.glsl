@@ -15,10 +15,12 @@ varying vec2 vUV;
 varying vec3 vT;
 varying vec3 vB;
 varying vec3 vN;
+varying vec3 vV;
 
 uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProj;
+uniform mat4 uInvView;
 uniform sampler2D uAnimTex;
 uniform vec2 uAnimInfo;
 
@@ -55,7 +57,11 @@ void main() {
 #else
     mat4 finalTransform = uModel;
 #endif
-    gl_Position = uProj * uView * finalTransform * vec4(aLocalPosition.rgb, 1.0);
+    vec4 worldPos = finalTransform * vec4(aLocalPosition.rgb, 1.0);
+    gl_Position = uProj * uView * worldPos;
+
+    vec4 camPos = uInvView * vec4(0., 0., 0., 1.0);
+    vV = normalize(camPos.xyz/camPos.w - worldPos.xyz/worldPos.w);
     
     vT = normalize(vec3(finalTransform * vec4(aTangent, 0.0)));
     vN = normalize(vec3(finalTransform * vec4(aNormal, 0.0)));

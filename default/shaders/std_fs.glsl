@@ -1,3 +1,8 @@
+#if !WEBGL2_CONTEXT
+#extension GL_EXT_shader_texture_lod : enable
+#define textureCubeLod textureCubeLodEXT
+#endif
+
 precision highp float;
 
 #define PI 3.14159265359
@@ -25,8 +30,11 @@ varying vec2 vUV;
 varying vec3 vT;
 varying vec3 vB;
 varying vec3 vN;
+varying vec3 vV;
 
 uniform samplerCube uIrradianceMap;
+uniform samplerCube uRadianceMap;
+uniform sampler2D uBRDF;
 
 uniform sampler2D uBaseColorTex;
 uniform sampler2D uNormalTex;
@@ -95,7 +103,7 @@ MaterialParameters GetMaterialParameters(vec2 uv) {
     params.baseColor = uBaseColorFactor;
 #endif
 #if USE_NORMAL_TEX
-    params.normal = texture2D(uNormalTex, uv).xyz * 2.0 - 1.0;
+    params.normal = normalize(texture2D(uNormalTex, uv).xyz * 2.0 - 1.0);
 #else
     params.normal = vec3(0.0, 0.0, 1.0);
 #endif
@@ -124,17 +132,27 @@ void main() {
     MaterialParameters matParams = GetMaterialParameters(vec2(0.0, 0.0));
 #endif
     mat3 tbn = mat3(normalize(vT), normalize(vB), normalize(vN));
-    vec3 worldNormal = tbn * matParams.normal;
 
-    vec3 irradiance = textureCube(uIrradianceMap, worldNormal).rgb;
-    vec3 radiance = vec3(0.0);// todo
+    vec3 V = normalize(vV);
+    vec3 N = tbn * normalize(matParams.normal);
+    //N=normalize(vN);
+    vec3 R = reflect(-V, N);
+    float NoV = max(dot(N, V), 0.0);
 
-    vec3 diffuse = matParams.baseColor * INV_PI * irradiance;
-    vec3 specular = vec3(0.0);// todo
+    vec3 irradiance = textureCube(uIrradianceMap, N).rgb;
+    vec3 radiance = textureCubeLod(uRadianceMap, R, matParams.roughness * 6.).rgb;
+    vec2 brdf = texture2D(uBRDF, vec2(NoV, matParams.roughness)).rg;
 
-    gl_FragColor.rgb = diffuse;
+    vec3 f0 = vec3(0.04);
+    vec3 diffuseColor = matParams.baseColor * INV_PI * (1. - matParams.metallic);
+    vec3 specularColor = mix(f0, matParams.baseColor, matParams.metallic);
 
-    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
+    vec3 diffuse = diffuseColor * irradiance;
+    vec3 specular = (specularColor * brdf.x + brdf.y) * radiance;
+
+    gl_FragColor.rgb = diffuse + specular + matParams.emissive;
+
+    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 2.));
     gl_FragColor.a = 1.0;
 }
 
