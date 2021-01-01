@@ -3,7 +3,7 @@ import { check, error } from './utils/debug-utils.js'
 import { assetUtils } from './utils/asset-utils.js'
 
 const canvas = document.querySelector('#glcanvas');
-let gl = canvas.getContext('webgl1');
+let gl = canvas.getContext('webgl1');// force webgl1 for now
 let isWebGL2 = true;
 if (!gl) {
     isWebGL2 = false;
@@ -28,7 +28,7 @@ else {
     getAndApplyExtension("EXT_shader_texture_lod");
     // unfortunately, safari doesn't support it
     //getAndApplyExtension("WEBGL_draw_buffers");
-    //getAndApplyExtension("OES_fbo_render_mipmap");
+    getAndApplyExtension("OES_fbo_render_mipmap");
 }
 
 // utils

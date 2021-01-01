@@ -12,7 +12,7 @@ class App {
     }
 
     init() {
-        this.gltfLoader.load('@scene/scene.gltf');
+        this.gltfLoader.load('@boss/scene.gltf');
         this.renderer.init();
     }
 

@@ -75,10 +75,12 @@ function createIBL(hdriPath) {
                 radiancePass.setShaderParameters({
                     uInvViewProj: invViewProjMats[i]
                 });
-                for (let level = 0; level < 1; ++level) {
+                let levelCount = 7;
+                for (let level = 0; level < levelCount; ++level) {
+                    let res = radianceRes / Math.pow(2, level);
                     renderTarget.bind().setColorAttachments([{ texture: ret.radianceMap, face: i, level: level }]);
-                    radiancePass.setShaderParameters({
-                        uRoughness: level / 4
+                    radiancePass.setViewport(0, 0, res, res).setShaderParameters({
+                        uRoughness: level / (levelCount - 1)
                     }).execute([screenDrawcall], renderTarget);
                 }
             }
@@ -168,14 +170,17 @@ class Renderer {
         // draw meshes
         this.stdRenderPass.setShaderParameters({
             uIrradianceMap: this.ibl.irradianceMap,
+            uRadianceMap: this.ibl.radianceMap,
+            uBRDF: this.ibl.brdfLut,
             uView: this.viewMat,
-            uProj: this.projMat
+            uProj: this.projMat,
+            uInvView: mathUtils.invMatrix(this.viewMat)
         }).execute(opaqueList);
 
         // maybe some postprocess
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
-            uBackGround: this.ibl.irradianceMap,
+            uBackGround: this.ibl.radianceMap,
             uBRDF: this.ibl.brdfLut,
             uBufferSize: [this.canvas.width, this.canvas.height],
             uInputSize: [16, 16]

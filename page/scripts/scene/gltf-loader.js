@@ -309,13 +309,14 @@ class GLTFLoader {
         this.textures = new Array(gltf.images.length);
         for (let i = 0; i < gltf.images.length; ++i) {
             // sampler fixed as aniso
-            let sRGB = gltf.images[i].uri.slice(0, gltf.images[i].uri.lastIndexOf('.')).endsWith('baseColor');
-            this.textures[i] = rc.createTextureFromUrl(this.path + gltf.images[i].uri, rc.FILTER_ANISO, rc.WARP_REPEAT, sRGB);
+            this.textures[i] = rc.createTextureFromUrl(this.path + gltf.images[i].uri, rc.FILTER_ANISO, rc.WARP_REPEAT);
         }
         // animations
-        this.animations = new Array(gltf.animations.length);
-        for (let i = 0; i < gltf.animations.length; ++i) {
-            this.animations[i] = createAnimationFromGLTF(gltf, gltfArrayBuffers, i);
+        if (gltf.animations) {
+            this.animations = new Array(gltf.animations.length);
+            for (let i = 0; i < gltf.animations.length; ++i) {
+                this.animations[i] = createAnimationFromGLTF(gltf, gltfArrayBuffers, i);
+            }
         }
         
         // set parameters for drawcall
@@ -387,7 +388,7 @@ class GLTFLoader {
     }
 
     setAnimation(animationTime, animationId = 0) {
-        if (!this.isReady) return;
+        if (!this.isReady || this.animations.length < 1) return;
         check(animationId < this.animations.length);
         this.animationTime = animationTime;
         this.animationId = animationId;
