@@ -40,7 +40,7 @@ vec3 LinearToSrgb(vec3 Color)
 
 void main() {
     gl_FragColor = textureCubeLod(uBackGround, normalize(vViewDir), 0.);
-    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 1.));
+    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 2.));
 	gl_FragColor.a = 1.0;
 
 	//vec2 extent = abs(vKeepAspectUV - 0.5);
