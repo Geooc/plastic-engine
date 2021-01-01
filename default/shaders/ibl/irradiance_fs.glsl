@@ -12,6 +12,7 @@ precision highp float;
 varying vec3 vViewDir;
 
 uniform samplerCube uHDRI;
+uniform float uEnvResSqr;
 
 const int ConvolutionSampleCount = 4096;
 
@@ -74,9 +75,9 @@ vec3 ImportanceSample (vec3 N)
         {
             float pdf = max(0.0, dot(N, L) * INV_PI);
             
-            float solidAngleTexel = 4. * PI / (6. * 256. * 256.);
+            float solidAngleTexel = 4. * PI / (6. * uEnvResSqr);
             float solidAngleSample = 1.0 / (float(ConvolutionSampleCount) * pdf);
-            float lod = 0.5 * log2(float(solidAngleSample / solidAngleTexel)) + 3.;
+            float lod = 0.5 * log2(solidAngleSample / solidAngleTexel);
 
             result += vec4(textureCubeLod(uHDRI, H, lod).rgb * NoL, 1.0);
         }

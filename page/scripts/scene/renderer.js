@@ -11,14 +11,15 @@ let screenDrawcall = rc.createDrawcall(rc.PRIM_TRIANGLE_STRIP, 4).bind().setAttr
 
 // todo: IBL
 function createIBL(hdriPath) {
-    const envCubemapRes = 512;
+    const envCubemapRes = 2048;
     const radianceRes = 256;
     const irradianceRes = 32;
     const brdfLutRes = 16;
     let ret = {
         radianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
-        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGB16F, null)
+        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGB16F, null),
+        envCubeMap : rc.createTexture(rc.TEX_CUBE).bind().setData(envCubemapRes, envCubemapRes, rc.PIXEL_R11G11B10F, null)
     };
 
     // matrices
@@ -42,21 +43,21 @@ function createIBL(hdriPath) {
             // render target
             let renderTarget = rc.createRenderTarget();
             // convert to cubemap
-            let envCubeMap = rc.createTexture(rc.TEX_CUBE).bind().setData(envCubemapRes, envCubemapRes, rc.PIXEL_R11G11B10F, null);
             envCubePass.setShaderParameters({
                 uHDRI: hdriTexture
             });
             for (let i = 0; i < 6; ++i) {
-                renderTarget.bind().setColorAttachments([{ texture: envCubeMap, face: i }]);
+                renderTarget.bind().setColorAttachments([{ texture: ret.envCubeMap, face: i }]);
                 envCubePass.setShaderParameters({
                     uInvViewProj: invViewProjMats[i]
                 }).execute([screenDrawcall], renderTarget);
             }
-            envCubeMap.bind().setSampler(rc.FILTER_TRILINEAR);
+            ret.envCubeMap.bind().setSampler(rc.FILTER_TRILINEAR);
 
             // irradiance
             irradiancePass.setShaderParameters({
-                uHDRI: envCubeMap
+                uHDRI: ret.envCubeMap,
+                uEnvResSqr: envCubemapRes * envCubemapRes
             });
             for (let i = 0; i < 6; ++i) {
                 renderTarget.bind().setColorAttachments([{ texture: ret.irradianceMap, face: i }]);
@@ -68,7 +69,8 @@ function createIBL(hdriPath) {
 
             // radiance
             radiancePass.setShaderParameters({
-                uHDRI: envCubeMap
+                uHDRI: ret.envCubeMap,
+                uEnvResSqr: envCubemapRes * envCubemapRes
             });
             ret.radianceMap.bind().setSampler(rc.FILTER_TRILINEAR);
             for (let i = 0; i < 6; ++i) {
@@ -91,8 +93,10 @@ function createIBL(hdriPath) {
             ret.brdfLut.bind().setSampler(rc.FILTER_BILINEAR);
 
             // finish
-            envCubeMap.destory();
             envCubePass.destory();
+            irradiancePass.destory();
+            radiancePass.destory();
+            brdfPass.destory();
             renderTarget.destory();
         }
     }
@@ -151,7 +155,7 @@ class Renderer {
 
     init() {
         // IBL
-        this.ibl = createIBL('@images/pedestrian_overpass_1k.hdr');
+        this.ibl = createIBL('@images/Tokyo_BigSight_3k.hdr');
         // standard pass
         this.stdRenderPass = rc.createRenderPassFromSourcePath('std', '@shaders/std_vs.glsl', '@shaders/std_fs.glsl').setLoadAction(false, false);
         // final pass
@@ -180,7 +184,7 @@ class Renderer {
         // maybe some postprocess
         this.finalPass.setShaderParameters({
             uInvViewProj: mathUtils.invMatrix(mathUtils.mulMatrices(this.projMat, this.viewMat)),
-            uBackGround: this.ibl.radianceMap,
+            uBackGround: this.ibl.envCubeMap,
             uBRDF: this.ibl.brdfLut,
             uBufferSize: [this.canvas.width, this.canvas.height],
             uInputSize: [16, 16]
