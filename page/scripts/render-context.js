@@ -3,7 +3,7 @@ import { check, error } from './utils/debug-utils.js'
 import { assetUtils } from './utils/asset-utils.js'
 
 const canvas = document.querySelector('#glcanvas');
-let gl = canvas.getContext('webgl2');// force webgl1 for now
+let gl = canvas.getContext('webgl2');
 let isWebGL2 = true;
 if (!gl) {
     isWebGL2 = false;
