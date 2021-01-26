@@ -4,11 +4,9 @@
 #define textureCubeLod textureCubeLodEXT
 #endif
 
-precision highp float;
-
-varying vec2 vUV;
-varying vec3 vViewDir;
-varying vec2 vKeepAspectUV;
+in vec2 vUV;
+in vec3 vViewDir;
+in vec2 vKeepAspectUV;
 uniform samplerCube uBackGround;
 uniform sampler2D uBRDF;
 
@@ -39,11 +37,11 @@ vec3 LinearToSrgb(vec3 Color)
 }
 
 void main() {
-    gl_FragColor = textureCubeLod(uBackGround, normalize(vViewDir), 0.);
-    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 2.));
-	gl_FragColor.a = 1.0;
+    outColor = textureCubeLod(uBackGround, normalize(vViewDir), 0.);
+    outColor.rgb = LinearToSrgb(ACESToneMapping(outColor.rgb, 2.));
+	outColor.a = 1.0;
 
 	//vec2 extent = abs(vKeepAspectUV - 0.5);
-	//gl_FragColor = max(extent.x, extent.y) <= 0.5 ? texture2D(uBRDF, vKeepAspectUV) : vec4(0.0);
+	//outColor = vec4(vUV, 0.0, 1.0);
 }
 

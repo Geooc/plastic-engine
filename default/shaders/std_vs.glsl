@@ -1,5 +1,3 @@
-precision highp float;
-
 attribute vec4 aLocalPosition;
 attribute vec3 aNormal;
 attribute vec3 aTangent;
@@ -10,12 +8,12 @@ attribute vec4 aJoints;
 attribute vec4 aWeights;
 
 #ifdef USE_ATTRIB_A_UV0
-varying vec2 vUV;
+out vec2 vUV;
 #endif
-varying vec3 vT;
-varying vec3 vB;
-varying vec3 vN;
-varying vec3 vV;
+out vec3 vT;
+out vec3 vB;
+out vec3 vN;
+out vec3 vV;
 
 uniform mat4 uModel;
 uniform mat4 uView;

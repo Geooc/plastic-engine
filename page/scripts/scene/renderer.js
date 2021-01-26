@@ -18,7 +18,7 @@ function createIBL(hdriPath) {
     let ret = {
         radianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(radianceRes, radianceRes, rc.PIXEL_R11G11B10F, null),
         irradianceMap : rc.createTexture(rc.TEX_CUBE).bind().setData(irradianceRes, irradianceRes, rc.PIXEL_R11G11B10F, null),
-        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGB16F, null),
+        brdfLut : rc.createTexture(rc.TEX_2D).bind().setData(brdfLutRes, brdfLutRes, rc.PIXEL_RGBA16F, null),
         envCubeMap : rc.createTexture(rc.TEX_CUBE).bind().setData(envCubemapRes, envCubemapRes, rc.PIXEL_R11G11B10F, null)
     };
 
@@ -82,7 +82,7 @@ function createIBL(hdriPath) {
                     let res = radianceRes / Math.pow(2, level);
                     renderTarget.bind().setColorAttachments([{ texture: ret.radianceMap, face: i, level: level }]);
                     radiancePass.setViewport(0, 0, res, res).setShaderParameters({
-                        uRoughness: level / (levelCount - 1)
+                        uRoughness: (level / (levelCount - 1)) * 0.86 + 0.14
                     }).execute([screenDrawcall], renderTarget);
                 }
             }
@@ -178,7 +178,7 @@ class Renderer {
             uBRDF: this.ibl.brdfLut,
             uView: this.viewMat,
             uProj: this.projMat,
-            uInvView: mathUtils.invMatrix(this.viewMat)
+            uInvView: mathUtils.invMatrix(this.viewMat),
         }).execute(opaqueList);
 
         // maybe some postprocess

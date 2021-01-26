@@ -7,9 +7,7 @@
 #define PI 3.14159265359
 #define INV_PI 0.318309886
 
-precision highp float;
-
-varying vec3 vViewDir;
+in vec3 vViewDir;
 
 uniform samplerCube uHDRI;
 uniform float uEnvResSqr;
@@ -88,6 +86,6 @@ vec3 ImportanceSample (vec3 N)
 
 void main()
 {
-    gl_FragColor = vec4(ImportanceSample(normalize(vViewDir)), 1.0);
+    outColor = vec4(ImportanceSample(normalize(vViewDir)), 1.0);
 }
 

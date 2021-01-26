@@ -1,8 +1,6 @@
 // env_cubemap.glsl
 
-precision highp float;
-
-varying vec3 vViewDir;
+in vec3 vViewDir;
 
 uniform sampler2D uHDRI;
 
@@ -18,6 +16,6 @@ void main()
 {
     vec2 uv = ViewVectorToUV(normalize(vViewDir));
     uv.y = 1. - uv.y;// flip y
-    gl_FragColor = min(texture2D(uHDRI, uv), 65504.);
+    outColor = min(texture2D(uHDRI, uv), 65504.);
 }
 

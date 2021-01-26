@@ -3,9 +3,7 @@
 #define PI 3.14159265359
 #define INV_PI 0.318309886
 
-precision highp float;
-
-varying vec2 vUV;
+in vec2 vUV;
 
 float geometryGGX(float NoV, float a)
 {
@@ -101,6 +99,6 @@ vec2 integrate(float roughness, float NoV)
 
 void main()
 {
-    gl_FragColor = vec4(integrate(vUV.y, vUV.x), 0.0, 0.0);
+    outColor = vec4(integrate(vUV.y, vUV.x), 0.0, 0.0);
 }
 

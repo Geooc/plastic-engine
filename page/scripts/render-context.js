@@ -3,7 +3,7 @@ import { check, error } from './utils/debug-utils.js'
 import { assetUtils } from './utils/asset-utils.js'
 
 const canvas = document.querySelector('#glcanvas');
-let gl = canvas.getContext('webgl1');// force webgl1 for now
+let gl = canvas.getContext('webgl2');// force webgl1 for now
 let isWebGL2 = true;
 if (!gl) {
     isWebGL2 = false;
@@ -684,7 +684,7 @@ class Shader {
                     value.bind(this._textures[name]);
                     break;
                 default:
-                    check(false, 'should never go here!');
+                    error('should never go here!');
                     break;
             }
             return true;
@@ -757,8 +757,8 @@ class RenderPass {
         this._depthWrite = true;
         this._colorWrite = 0xF;
 
-        this._needLoadColor = true;
-        this._needLoadDepth = true;
+        this._needLoadColor = false;
+        this._needLoadDepth = false;
     }
 
     setShaderSource(vsSrc, fsSrc) {
@@ -822,7 +822,13 @@ class RenderPass {
     }
 
     getShaderMacros() {
-        let ret = isWebGL2 ? '#define WEBGL2_CONTEXT 1\n' : '#define WEBGL2_CONTEXT 0\n';
+        let ret = isWebGL2 ? '#version 300 es\n#define WEBGL2_CONTEXT 1\nprecision highp float;\n' : '#define WEBGL2_CONTEXT 0\nprecision highp float;\n';
+        if (isWebGL2) ret += `
+        #define attribute in
+        #define texture2D texture
+        #define textureCube texture
+        #define textureCubeLod textureLod
+        `;
         for (const flagName in this._shaderFlags) {
             ret += `#define ${flagName} ${this._shaderFlags[flagName]}\n`;
         }
@@ -895,8 +901,9 @@ class RenderPass {
             let shader = this._shaderMap[drawcall.getShaderKey()];
             if (!shader) {
                 const macros = this.getShaderMacros() + drawcall.getShaderMacros();
+                const fsMacros = isWebGL2 ? 'out vec4 outColor;\n' : '';
                 const vsSrc = macros + this._vsSrc;
-                const fsSrc = macros + this._fsSrc;
+                const fsSrc = macros + fsMacros + this._fsSrc;
                 shader = new Shader(vsSrc, fsSrc, drawcall.attribs);
                 shader.bind().setParameters(this._shaderParams);
                 this._shaderMap[drawcall.getShaderKey()] = shader;

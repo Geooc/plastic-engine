@@ -3,8 +3,6 @@
 #define textureCubeLod textureCubeLodEXT
 #endif
 
-precision highp float;
-
 #define PI 3.14159265359
 #define INV_PI 0.318309886
 
@@ -25,12 +23,12 @@ precision highp float;
 #endif
 
 #ifdef USE_ATTRIB_A_UV0
-varying vec2 vUV;
+in vec2 vUV;
 #endif
-varying vec3 vT;
-varying vec3 vB;
-varying vec3 vN;
-varying vec3 vV;
+in vec3 vT;
+in vec3 vB;
+in vec3 vN;
+in vec3 vV;
 
 uniform samplerCube uIrradianceMap;
 uniform samplerCube uRadianceMap;
@@ -150,9 +148,9 @@ void main() {
     vec3 diffuse = diffuseColor * irradiance;
     vec3 specular = (specularColor * brdf.x + brdf.y) * radiance;
 
-    gl_FragColor.rgb = diffuse + specular + matParams.emissive;
+    outColor.rgb = diffuse + specular + matParams.emissive;
 
-    gl_FragColor.rgb = LinearToSrgb(ACESToneMapping(gl_FragColor.rgb, 2.));
-    gl_FragColor.a = 1.0;
+    outColor.rgb = LinearToSrgb(ACESToneMapping(outColor.rgb, 2.));
+    outColor.a = 1.0;
 }
 

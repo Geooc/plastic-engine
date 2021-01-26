@@ -1,17 +1,15 @@
 // pp_common_vs.glsl: common vs for most post-processing
 
-precision highp float;
-
 attribute vec2 aPos;
-varying vec2 vUV;
+out vec2 vUV;
 
 #ifdef USE_CUBEMAP_TEXCOORD
-varying vec3 vViewDir;
+out vec3 vViewDir;
 uniform mat4 uInvViewProj;
 #endif
 
 #ifdef KEEP_INPUT_ASPECT
-varying vec2 vKeepAspectUV;
+out vec2 vKeepAspectUV;
 uniform vec2 uInputSize;
 uniform vec2 uBufferSize;
 #endif
