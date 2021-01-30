@@ -28,7 +28,7 @@ else {
     getAndApplyExtension("EXT_shader_texture_lod");
     // unfortunately, safari doesn't support it
     //getAndApplyExtension("WEBGL_draw_buffers");
-    getAndApplyExtension("OES_fbo_render_mipmap");
+    //getAndApplyExtension("OES_fbo_render_mipmap");
 }
 
 // utils
@@ -822,12 +822,17 @@ class RenderPass {
     }
 
     getShaderMacros() {
-        let ret = isWebGL2 ? '#version 300 es\n#define WEBGL2_CONTEXT 1\nprecision highp float;\n' : '#define WEBGL2_CONTEXT 0\nprecision highp float;\n';
+        let ret = isWebGL2 ? '#version 300 es\n#define WEBGL2_CONTEXT 1\n' : '#define WEBGL2_CONTEXT 0\n';
+        ret += 'precision highp float;\n';
         if (isWebGL2) ret += `
         #define attribute in
         #define texture2D texture
+        #define texture2DLod textureLod
         #define textureCube texture
         #define textureCubeLod textureLod
+        `;
+        else ret +=`
+        #define out varying
         `;
         for (const flagName in this._shaderFlags) {
             ret += `#define ${flagName} ${this._shaderFlags[flagName]}\n`;
@@ -901,8 +906,9 @@ class RenderPass {
             let shader = this._shaderMap[drawcall.getShaderKey()];
             if (!shader) {
                 const macros = this.getShaderMacros() + drawcall.getShaderMacros();
-                const fsMacros = isWebGL2 ? 'out vec4 outColor;\n' : '';
-                const vsSrc = macros + this._vsSrc;
+                const vsMacros = isWebGL2 ? '' : '#define in attribute\n';
+                const fsMacros = isWebGL2 ? 'out vec4 outColor;\n' : '#define in varying\n#define outColor gl_FragColor\n';
+                const vsSrc = macros + vsMacros + this._vsSrc;
                 const fsSrc = macros + fsMacros + this._fsSrc;
                 shader = new Shader(vsSrc, fsSrc, drawcall.attribs);
                 shader.bind().setParameters(this._shaderParams);
