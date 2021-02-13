@@ -2,8 +2,14 @@
 
 import { mathUtils } from '../utils/math-utils.js'
 
+const MoveMode = {
+    NONE: 0,
+    ROT: 1,
+    TRANS: 2,
+};
+
 class Controller {
-    constructor(renderer, gltfLoader) {
+    constructor(renderer, gltfLoader, ui) {
         this.frame = 0;
         this.delta = 0;
         this._lastFrame = 0;
@@ -21,8 +27,10 @@ class Controller {
         this.targetAt = this.at;
         this.needFitBounds = true;
 
+        this._moveMode = MoveMode.NONE;
+
         this.renderer = renderer;
-        this._addCameraController(renderer.canvas);
+        this._addController(renderer.canvas, ui);
 
         this.gltfLoader = gltfLoader;
     }
@@ -58,7 +66,7 @@ class Controller {
         this.targetYaw = Math.max(Math.min(this.recordYaw + deltaY, 75), -75);
     }
 
-    _handleMove(x, y) {
+    _handleTrans(x, y) {
         let deltaX = (this.startX - x) * this.cameraScaleSpeed;
         let deltaY = (y - this.startY) * this.cameraScaleSpeed;
         let RightAndUp = mathUtils.calcOrbitViewRightAndUp(this.pitch, this.yaw);
@@ -66,54 +74,70 @@ class Controller {
         this.targetAt = mathUtils.addVector(this.targetAt, mathUtils.scaleVector(RightAndUp[1], deltaY));
     }
 
+    _handleMove(x, y) {
+        switch (this._moveMode) {
+            case MoveMode.ROT:
+                this._handleRot(x, y);
+                break;
+            case MoveMode.TRANS:
+                this._handleTrans(x, y);
+                break;
+            default:
+                break;
+        }
+    }
+
     _handleScale(scale) {
         this.targetRadius = Math.max(this.targetRadius + scale * this.cameraScaleSpeed, 2);
     }
     // todo: needs refactor
-    _addCameraController(canvas) {
+    _addController(canvas, ui) {
         canvas.onmousedown = (e) => {
             e.preventDefault();
             this._recordStart(e.clientX, e.clientY);
-            if (e.buttons == 1) {
-                canvas.onmousemove = (e) => {
-                    e.preventDefault();
-                    this._handleRot(e.clientX, e.clientY);
-                }
+            if (ui.isHovered()) {
+                ui.onPress(e.buttons);
             }
-            else if (e.buttons == 4) {
-                canvas.onmousemove = (e) => {
-                    e.preventDefault();
-                    this._handleMove(e.clientX, e.clientY);
-                }
+            else switch (e.buttons) {
+                case 1:
+                    this._moveMode = MoveMode.ROT;
+                    break;
+                case 4:
+                    this._moveMode = MoveMode.TRANS;
+                    break;
+                default:
+                    break;
             }
-            canvas.onmouseup = (e) => {
-                canvas.onmousemove = null;
-            }
+        }
+        canvas.onmouseup = (e) => {
+            e.preventDefault();
+            this._moveMode = MoveMode.NONE;
+            ui.onRelease(e.buttons);
+        }
+        canvas.onmousemove = (e) => {
+            e.preventDefault();
+            this._handleMove(e.clientX, e.clientY);
+            ui.onMouseMove(e.clientX, e.clientY);
         }
         canvas.onwheel = (e) => {
             e.preventDefault();
             this._handleScale(e.deltaY);
         }
         // for touch screen
-        // todo: use HAMMER.JS
+        // todo: two finger
         canvas.addEventListener('touchstart', (e) => {
             if (e.targetTouches.length != 1) return;
             e.preventDefault();
             this._recordStart(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-            canvas.addEventListener('touchmove', (e) => {
-                if (e.targetTouches.length == 1) {
-                    e.preventDefault();
-                    this._handleRot(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
-                }
-                else if (e.targetTouches.length == 2) {
-                    // todo
-                }
-            });
-            canvas.addEventListener('touchend', (e) => {
-                if (e.targetTouches.length == 1)
-                    canvas.addEventListener('touchmove', null);
-            });
-        })//
+            this._moveMode = MoveMode.ROT;
+        })
+        canvas.addEventListener('touchend', (e) => {
+            if (e.targetTouches.length == 1) this._moveMode = MoveMode.NONE;
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            this._handleMove(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
+        });
     }
 
     update(now) {
