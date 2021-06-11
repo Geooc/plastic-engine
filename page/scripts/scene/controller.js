@@ -30,7 +30,7 @@ class Controller {
         this._moveMode = MoveMode.NONE;
 
         this.renderer = renderer;
-        this._addController(renderer.canvas, ui);
+        this._addController(ui.$el);
 
         this.gltfLoader = gltfLoader;
     }
@@ -91,14 +91,12 @@ class Controller {
         this.targetRadius = Math.max(this.targetRadius + scale * this.cameraScaleSpeed, 2);
     }
     // todo: needs refactor
-    _addController(canvas, ui) {
-        canvas.onmousedown = (e) => {
+    _addController(ui) {
+        ui.onmousedown = (e) => {
             e.preventDefault();
             this._recordStart(e.clientX, e.clientY);
-            if (ui.isHovered()) {
-                ui.onPress(e.buttons);
-            }
-            else switch (e.buttons) {
+
+            switch (e.buttons) {
                 case 1:
                     this._moveMode = MoveMode.ROT;
                     break;
@@ -109,32 +107,31 @@ class Controller {
                     break;
             }
         }
-        canvas.onmouseup = (e) => {
+        ui.onmouseup = (e) => {
             e.preventDefault();
             this._moveMode = MoveMode.NONE;
-            ui.onRelease(e.buttons);
         }
-        canvas.onmousemove = (e) => {
+        ui.onmousemove = (e) => {
             e.preventDefault();
             this._handleMove(e.clientX, e.clientY);
-            ui.onMouseMove(e.clientX, e.clientY);
+            // ui.onMouseMove(e.clientX, e.clientY);
         }
-        canvas.onwheel = (e) => {
+        ui.onwheel = (e) => {
             e.preventDefault();
             this._handleScale(e.deltaY);
         }
         // for touch screen
         // todo: two finger
-        canvas.addEventListener('touchstart', (e) => {
+        ui.addEventListener('touchstart', (e) => {
             if (e.targetTouches.length != 1) return;
             e.preventDefault();
             this._recordStart(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
             this._moveMode = MoveMode.ROT;
         })
-        canvas.addEventListener('touchend', (e) => {
+        ui.addEventListener('touchend', (e) => {
             if (e.targetTouches.length == 1) this._moveMode = MoveMode.NONE;
         });
-        canvas.addEventListener('touchmove', (e) => {
+        ui.addEventListener('touchmove', (e) => {
             e.preventDefault();
             this._handleMove(e.targetTouches[0].clientX, e.targetTouches[0].clientY);
         });

@@ -3,9 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <title>Plastic Engine</title>
+    <style>
+        #ui {
+            position: fixed;
+            color: aqua;
+            width: 100vw; height: 100vh;
+        }
+        #glcanvas {
+            position: fixed;
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+        }
+    </style>
 </head>
 <body style="margin: 0;">
-    <canvas id="glcanvas" style="display: block; width: 100vw; height: 100vh;"></canvas>
+    <div id='ui'>
+        {{ text }}
+        <!-- <div class="node" v-for="node in nodes"></div> -->
+    </div>
+    <canvas id="glcanvas"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.1.0/gl-matrix-min.js"></script>
     <script type="module" src="scripts/app.js"></script>
 </body>
